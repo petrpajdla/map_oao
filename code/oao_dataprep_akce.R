@@ -21,6 +21,7 @@ akce_cl <- akce %>%
          typ = hlavni_typ,
          pristup = pristupnost,
          negativni = negativni_jednotka,
+         datum = datum_ukonceni_v,
          dj,
          pian,
          x = centroid_e,

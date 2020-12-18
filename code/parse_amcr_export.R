@@ -40,7 +40,7 @@ komp <- read_delim(here("data/raw", "export_2020-09-12_komponenta.csv"),
 
 dj <- dj %>% select(ident_cely, parent, pian, negativni_jednotka)
 pian <- pian %>% select(ident_cely, geom_wkt, starts_with("centroid"))
-akce <- akce %>% select(ident_cely, organizace, hlavni_typ, pristupnost)
+akce <- akce %>% select(ident_cely, organizace, hlavni_typ, pristupnost, datum_ukonceni_v)
 proj <- proj %>% select(ident_cely, id_rok, stav_popis, typ_projektu, organizace_prihlaseni, starts_with("geometry"))
 komp <- komp %>% select(ident_cely, parent, obdobi, obdobi_poradi, areal)
 
