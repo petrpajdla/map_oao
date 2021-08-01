@@ -4,22 +4,23 @@ library(leaflet)
 library(DT)
 library(shinycssloaders)
 
-# Data input
+# Data input ---------------------------------------------------------------
 oao_names <- readr::read_csv("oao_names.csv")
 oao_scope <- sf::st_read(dsn = "oao_scope.geojson")
 oao_grid <- sf::st_read(dsn = "oao_grid.geojson")
+
+# url part
+# "https://knytt.shinyapps.io/map_oao_test/?org=%C3%9AAPP%20Brno"
+
+# oao scope whole country
+oao_rep <- oao_scope %>% dplyr::filter(area >= 7.8e10) %>% 
+  sf::st_drop_geometry()
 
 # spinner image
 spinner = "aiscr_spinner.gif"
 sleep <- 0 # 1.2
 
-# navbarPage("Location of Blood Banks", id="main",
-#            tabPanel("Map", leafletOutput("bbmap", height=1000)),
-#            tabPanel("Data", DT::dataTableOutput("data")),
-#            tabPanel("Read Me",includeMarkdown("readme.md")))
-
-
-# Define UI ---------------------------------------------------------------
+# UI definition ------------------------------------------------------------
 
 ui <- function(request) {
   navbarPage(
@@ -48,14 +49,23 @@ ui <- function(request) {
         background-color: #3E3F3A;
       }
 
-    .flex-container > div {
+      .flex-container > div {
         background-color: #3E3F3A;
         color: white;
         margin: 10px;
         text-align: center;
         line-height: 75px;
         font-size: 12px;
-    }
+      }
+      
+      .js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar {
+        background: #3E3F3A;
+        opacity: 0.6;
+      }
+      
+      .leaflet-control-layers-base {
+        text-align: left;
+      }
       "))
     ),
     footer = tags$footer(
@@ -68,7 +78,7 @@ ui <- function(request) {
                  tags$a(href = 'https://www.aiscr.cz/', target = '_blank',
                         tags$img(src = 'AISCR_CZ_H_White.png', height = '75px'))),
         tags$div(style = 'flex-grow: 1', 
-                 tags$a(href = 'http://arub.avcr.cz/', target = '_blank',
+                 tags$a(href = 'https://arub.avcr.cz/', target = '_blank',
                         tags$img(src = 'ARUB_logo_bile_RGB_HR.png', height = '80px')))
       )
     ), 
@@ -128,56 +138,88 @@ ui <- function(request) {
                    "Oprávnění mají",
                    HTML("<div style = 'padding: 15px;'>
                       Kliknutím do mapy zvolte bod zájmu.
-                      Na zadáném území mohou archeologický výzkum provádět organizace uvedené níže v tabulce.
-                      Organizace jsou řazeny vzestupně dle velikosti území, na kterém jsou oprávněny provádět archeologický výzkum.
+                      Na zadaném území mohou archeologický 
+                      výzkum provádět organizace uvedené v tabulce níže.
+                      Organizace jsou řazeny vzestupně dle velikosti území, 
+                      na kterém jsou oprávněny provádět archeologický výzkum.
                       </div>"),
-                   tableOutput("click_table") %>% 
-                     withSpinner(color = "#3E3F3A", size = 0.6)
+                   fluidRow(
+                     column(6, h4("Oprávnění ve vybrané oblasti"), 
+                            tableOutput("click_table")
+                            # withSpinner(color = "#3E3F3A", size = 0.6)
+                     ),
+                     column(6, h4("Oprávnění na celé území ČR"),
+                            tableOutput("republika_table")
+                     )
+                   )
+                   
                  ),
                  tabPanel(
                    "Výzkumy provádí",
                    fluidRow(
-                     column(5,
-                            tags$div(
-                              style = 'padding: 15px;', 
-                              "V okruhu ", 
-                              textOutput("radius", inline = TRUE),
-                              " km archeologický výzkum v minulosti prováděly následující organizace."),
-                     ),
                      column(7,
                             tags$div(
+                              style = 'padding: 15px;',
+                              "Kliknutím do mapy zvolte bod zájmu. V okruhu ",
+                              textOutput("buffer", inline = TRUE),
+                              " km archeologický výzkum v posledních 5 letech
+                              prováděly organizace uvedené v tabulce níže.
+                              Organizace jsou řazeny sestupně dle počtu archeologických 
+                              výzkumů v zadané vzdálenosti"),
+                     ),
+                     column(5,
+                            tags$div(
                               style = 'padding: 10px;',
-                              sliderInput("radius", "Zvolte vzdálenost", min = 1, max = 15, value = 5, ticks = FALSE, post = " km")
+                              sliderInput("buffer", "Zvolte vzdálenost",
+                                          min = 5, max = 20,
+                                          value = 5, step = 5,
+                                          ticks = FALSE, post = " km")
                             )
                      )
                    ),
-                   tableOutput("table_filtered")
+                   h4("Výzkumy v zadané vzdálenosti"),
+                   tableOutput("buffer_table")
                  )
+                 # tabPanel(
+                 #   "Výzkumy provádí",
+                 #   HTML("<div style = 'padding: 15px;'>
+                 #      V okruhu 10 a 20 km výzkumy v posledních 5 letech
+                 #      prováděly organizace uvedené níže.
+                 #      </div>"),
+                 #   fluidRow(
+                 #     column(6, h4("V okruhu 10 km"),
+                 #            tableOutput("buffer1_table")
+                 #     ),
+                 #     column(6, h4("V okruhu 20 km"),
+                 #            tableOutput("buffer2_table")
+                 #     )
+                 #   )
+                 #   
+                 # )
                )
         )
       )
     ),
     
-    # List tab ----------------------------------------------------------------
+    # Seznam tab ----------------------------------------------------------------
     
     tabPanel(
       value = "Seznam",
       title = "Seznam organizací",
-      fluidRow(
-        column(2, selectInput("kraj", "Kraj:",
-                              choices = c("Všechny"),
-                              selectize = TRUE, multiple = TRUE),
-        ),
-        column(2, selectInput("ores", "Okres:",
-                              choices = c("Všechny"),
-                              selectize = TRUE, multiple = TRUE),
-        ),
-      ),
-      # tags$style(type = "text/css", "#table {height: calc(100vh - 200px) !important;}"),
+      # fluidRow(
+      #   column(2, selectInput("kraj", "Kraj:",
+      #                         choices = c("Všechny"),
+      #                         selectize = TRUE, multiple = TRUE),
+      #   ),
+      #   column(2, selectInput("ores", "Okres:",
+      #                         choices = c("Všechny"),
+      #                         selectize = TRUE, multiple = TRUE),
+      #   ),
+      # ),
       tags$div(
         DT::dataTableOutput("table") %>%
-          withSpinner(image = spinner),
-        style = "overflow-y: auto; height: calc(100vh - 300px) !important;" # "height: 600px"
+          withSpinner(image = spinner)
+        # style = "overflow-y: auto; height: calc(100vh - 100px) !important;"
       )
     ),
     
@@ -238,8 +280,8 @@ server <- function(input, output, session) {
     oao_names %>% dplyr::filter(oao == input$oao)
   })
   
-  output$radius <- renderText({
-    input$radius
+  output$buffer <- renderText({
+    input$buffer
   })
   
   # Main text -------------------------------------------------------------
@@ -272,18 +314,21 @@ server <- function(input, output, session) {
   # Main map -----------------------------------------------------------------
   
   leaflet_map <- oao_scope %>% 
-    leaflet(options = leafletOptions(minZoom = 8, maxZoom = 13)) %>% 
+    leaflet(options = leafletOptions(minZoom = 7, maxZoom = 13)) %>% 
     setView(zoom = 8, lng = 15.4730, lat = 49.8175) %>% 
     setMaxBounds(11, 48, 20, 52) %>% 
-    addTiles(group = "OpenStreetMap") %>% 
+    addTiles(group = "Open Street Map") %>% 
     addProviderTiles(providers$CartoDB.Positron, 
-                     group = "CARTO Pozitron") %>% 
-    addTiles(urlTemplate = "http://ags.cuzk.cz/arcgis/rest/services/zmwm/MapServer/tile/{z}/{y}/{x}?blankTile=false", 
-             attribution = "Základní Mapy ČR © <a href='https://www.cuzk.cz/' target = '_blank'>ČÚZK</a>", 
+                     group = "Desaturovaná mapa") %>% 
+    addTiles(urlTemplate = paste0("http://ags.cuzk.cz/arcgis/rest/services/zmwm/",
+                                  "MapServer/tile/{z}/{y}/{x}?blankTile=false"), 
+             attribution = paste0("Základní Mapy ČR ©",
+                                  "<a href='https://www.cuzk.cz/'",
+                                  "target = '_blank'>ČÚZK</a>"), 
              group = "Základní mapy ČR") %>% 
     addLayersControl(baseGroups = c(
-      "OpenStreetMap", 
-      "CARTO Pozitron", 
+      "Open Street Map", 
+      "Desaturovaná mapa", 
       "Základní mapy ČR"),
       options = layersControlOptions(collapsed = TRUE))
   
@@ -337,13 +382,8 @@ server <- function(input, output, session) {
     leaflet_map
   })
   
-  # map_click <- list(15.4553852098021, 49.8612331525854)
-  # names(map_click) <- c("lng", "lat")
-  
-  # predicate <- sf::st_intersects(oao_scope, map_click_point)
-  # sf::st_drop_geometry(oao_scope)[predicate %>% lengths() > 0, ]
-  
   observe({
+    # coordinates of map click
     click <- input$small_map_click
     
     if (!is.null(click)) {
@@ -355,21 +395,47 @@ server <- function(input, output, session) {
                          stroke = TRUE, fillOpacity = 0.6,
                          popup = "Zvolená poloha")
       
+      # point click
       click_sf <- sf::st_as_sf(data.frame(click), 
                                coords = c("lng", "lat"), crs = 4326)
-      click_predicate <- sf::st_intersects(oao_scope, click_sf)
-      click_oao <- sf::st_drop_geometry(oao_scope)[click_predicate %>% lengths() > 0, ] %>% 
-        dplyr::arrange(area) %>% 
-        dplyr::mutate() %>% 
-        dplyr::select(Organizace = nazev_zkraceny, Detail = local_url, nazev_ascii)
       
+      # oprávnění mají (click table)
+      scope_pred <- sf::st_intersects(oao_scope, click_sf)
+      
+      click_oao <- sf::st_drop_geometry(oao_scope)[scope_pred %>% lengths() > 0, ] %>% 
+        dplyr::filter(!nazev_zkraceny %in% oao_rep$nazev_zkraceny) %>% 
+        dplyr::arrange(area) %>% 
+        dplyr::mutate(local_url = paste0(
+          "<a href=", "?=", ">", nazev_zkraceny, "</a>"
+        )) %>% 
+        dplyr::select(Organizace = nazev_zkraceny, Detail = local_url)
       
       output$click_table <- renderTable({
-        Sys.sleep(sleep)
         click_oao
       }, sanitize.text.function = function(x) x)
+      
+      # výzkumy provádí (grid table)
+      grid_pred <- sf::st_intersects(oao_grid, 
+                                     sf::st_buffer(click_sf, input$buffer * 1e3))
+      
+      buffer_oao <- sf::st_drop_geometry(oao_grid)[grid_pred %>% lengths() > 0, ] %>% 
+        dplyr::group_by(nazev_zkraceny) %>% 
+        dplyr::summarize(value = sum(value)) %>% 
+        dplyr::arrange(dplyr::desc(value)) %>% 
+        dplyr::select(Organizace = nazev_zkraceny)
+      
+      # buffer table
+      output$buffer_table <- renderTable({
+        buffer_oao
+      }, sanitize.text.function = function(x) x)
+      
     }
   })
+  
+  # oao scope republika table
+  output$republika_table <- renderTable({
+    oao_rep
+  }, sanitize.text.function = function(x) x)
   
   # Seznam ---------------------------------------------------------------
   
@@ -383,16 +449,11 @@ server <- function(input, output, session) {
                   options = list(
                     # pageLength = 40,
                     deferRender = TRUE,
-                    scrollY = "calc(100vh - 410px)", 
+                    scrollY = "calc(100vh - 300px)", 
                     scroller = TRUE
                   )
     )
   })
-  
-  output$table_filtered <- renderTable({
-    oao_names[1:6, 1:6]
-  })
-  
 }
 
 
