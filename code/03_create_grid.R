@@ -13,6 +13,7 @@ grid <- RCzechia::KFME_grid("high")
 
 # akce
 akce <- read_csv(here::here("data/processed", "pian_akce.csv"))
+proj <- read_csv(here::here("data/processed", "pian_proj.csv"))
 
 # heslar
 heslar <- read_csv(here::here("data/raw", "heslar_organizace.csv"))
@@ -48,21 +49,46 @@ akce_clean <- akce %>%
          nazev_zkraceny = if_else(str_detect(nazev_zkraceny, "Archeologický ústav Brno"), 
                                   "Archeologický ústav Brno", nazev_zkraceny))
 
+proj_clean <- proj %>% 
+  filter(!is.na(organizace_prihlaseni)) %>% 
+  select(ident = ident_cely,
+         nazev_zkraceny = organizace_prihlaseni,
+         # typ = hlavni_typ,
+         # pristup = pristupnost,
+         # negativni = negativni_jednotka,
+         # datum = datum_ukonceni_v,
+         # dj,
+         # pian,
+         x = geometry_e,
+         y = geometry_n) %>% 
+  mutate(nazev_zkraceny = if_else(str_detect(nazev_zkraceny, "MU Brno"), 
+                                  "MU Brno", nazev_zkraceny),
+         nazev_zkraceny = if_else(str_detect(nazev_zkraceny, "NPÚ"), 
+                                  "NPÚ generální ředitelství", nazev_zkraceny),
+         nazev_zkraceny = if_else(str_detect(nazev_zkraceny, "Archeologický ústav Brno"), 
+                                  "Archeologický ústav Brno", nazev_zkraceny))
+
+pian_clean <- akce_clean %>% bind_rows(proj_clean)
+
 # check if all oao present
-akce_clean$nazev_zkraceny %in% heslar$nazev_zkraceny %>% all()
-oao_platne[!oao_platne %in% akce_clean$nazev_zkraceny]
-akce_clean$nazev_zkraceny[!akce_clean$nazev_zkraceny %in% oao_platne] %>% 
+pian_clean$nazev_zkraceny %in% heslar$nazev_zkraceny %>% all()
+pian_clean$nazev_zkraceny[!pian_clean$nazev_zkraceny %in% heslar$nazev_zkraceny]
+
+oao_platne[!oao_platne %in% pian_clean$nazev_zkraceny]
+
+# OAO that have PIANs but are not OAO!
+pian_clean$nazev_zkraceny[!pian_clean$nazev_zkraceny %in% oao_platne] %>% 
   factor() %>% levels()
 
 # filter only platne OAO dle GD seznamu
-akce_clean <- akce_clean %>% filter(nazev_zkraceny %in% oao_platne) 
+pian_clean <- pian_clean %>% filter(nazev_zkraceny %in% oao_platne) 
 
 # sf ----------------------------------------------------------------------
 
-akce_sf <- akce_clean %>% st_as_sf(coords = c("x", "y")) %>% 
+pian_sf <- pian_clean %>% st_as_sf(coords = c("x", "y")) %>% 
   st_set_crs(4326)
 
-akce_nest <- akce_sf %>% 
+pian_nest <- pian_sf %>% 
   group_by(nazev_zkraceny) %>% 
   nest()
 
@@ -79,7 +105,7 @@ contained_in_grid <- function(x, grid) {
     mutate(scaled = log10(value + 1))
 }
 
-grids <- akce_nest %>% 
+grids <- pian_nest %>% 
   mutate(grid = map(data, contained_in_grid, grid)) %>% 
   select(-data) %>% 
   unnest(grid) %>% 
