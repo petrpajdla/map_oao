@@ -9,7 +9,7 @@ library(shinycssloaders)
 
 # url main part
 # "https://knytt.shinyapps.io/map_oao_test/?org=%C3%9AAPP%20Brno"
-url_main <- "http://127.0.0.1:5493"
+url_main <- "https://knytt.shinyapps.io/map_oao_test/"
 
 add_link <- function(x) {
   x %>% 
