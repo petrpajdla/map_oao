@@ -5,3 +5,6 @@
 .DS_Store
 
 data/
+app/*.geojson
+app/rsconnect/
+code/legacy/
