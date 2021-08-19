@@ -225,7 +225,8 @@ ui <- function(request) {
             # )
           ),
           tags$hr(),
-          tags$h3(textOutput("name")),
+          tags$h3(htmlOutput("link_local", inline = TRUE),
+                  textOutput("name", inline = TRUE)),
           tags$p(textOutput("ico", inline = TRUE)),
           tags$p(htmlOutput("web")),
           tags$p(htmlOutput("link_da")),
@@ -463,6 +464,15 @@ server <- function(input, output, session) {
                icon_ext_link, 
                " Digitálním archivu AMČR</a>.")
     }
+  })
+  
+  output$link_local <- renderText({
+    req(input$oao)
+    oao_meta_flt() %>% 
+      dplyr::pull(nazev_zkraceny) %>% 
+      stringr::str_replace_all("\\s", "%20") %>% 
+      paste0("<a href=", url_main, "?tab=Mapa&org=", ., ">", 
+             icon("fas fa-link"), "</a>")
   })
   
   output$h4_adresa <- renderText({
