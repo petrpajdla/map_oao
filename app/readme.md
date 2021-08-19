@@ -1,3 +1,5 @@
+### O Aplikaci
+
 Aplikace je součástí infrastruktury <a href="https://www.aiscr.cz/" target="_blank">Archeologický informační systém ČR</a> (AIS CR) a<br> je provozována 
 <a href="https://www.arup.cas.cz/" target="_blank">Archeologickým ústavem AV ČR, Praha, v.v.i.</a> (ARÚ) a<br>
 <a href="https://arub.avcr.cz/" target="_blank">Archeologickým ústavem AV ČR, Brno, v.v.i.</a> (ARÚB).
@@ -19,7 +21,7 @@ Poslední aktualizace dat proběhla 1. 8. 2021.
 
 Seznamy dohod uzavřených s Akademií věd  ČR na stránkách <a href="https://www.arup.cas.cz/kdo-je-opravnen-provadet-archeologicke-vyzkumy/" target="_blank">ARÚ</a> a <a href="https://www.arub.cz/referat-archeologicke-pamatkove-pece/opravnene-organizace/" target="_blank">ARÚB</a>.
 
-### Oznámení o stavebním či jiném záměru
+### Oznámení o stavebním záměru
 Pro oznámení o stavebním či jiném záměru využijte prosím online formulář <a href="https://backend.aiscr.cz/oznameni/0/" target="_blank">zde</a>.
 
 <hr>
