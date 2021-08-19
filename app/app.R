@@ -14,7 +14,8 @@ add_link <- function(x) {
   x %>% 
     dplyr::mutate(text = paste0(
       "<a href=", url_main, 
-      "?org=", stringr::str_replace_all(nazev_zkraceny, "\\s", "%20"), ">", 
+      "?tab=Mapa",
+      "&org=", stringr::str_replace_all(nazev_zkraceny, "\\s", "%20"), ">", 
       as.character(icon("fas fa-link")), "</a> ", nazev_zkraceny
     ))
 }
@@ -62,7 +63,7 @@ oao_rep <- oao_scope %>% dplyr::filter(area >= 7.8e10) %>%
 
 # spinner image
 spinner = "aiscr_spinner.gif"
-sleep <- 1.2 # 1.2
+sleep <- 0.4 # 1.2
 
 # UI definition ------------------------------------------------------------
 
