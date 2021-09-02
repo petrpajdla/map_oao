@@ -69,40 +69,56 @@ sleep <- 0.4 # 1.2
 
 ui <- function(request) {
   navbarPage(
-    title = "Organizace s oprávněním provádět archeologický výzkum",
+    title = tags$div(
+      tags$div(
+        class = 'flex-container-logos',
+        tags$div(
+          style = 'flex-grow: 1',
+          tags$a(href = 'https://www.aiscr.cz/', target = '_blank',
+                 tags$img(src = 'AISCR_CZ_H_White.png', height = '60px'))),
+        # tags$div(
+        #   style = 'flex-grow: 1',
+        #   tags$a(href = 'https://www.arup.cas.cz/', target = '_blank',
+        #          tags$img(src = 'ARU_logo_bile.png', height = '40px'))),
+        # tags$div(
+        #   style = 'flex-grow: 1',
+        #   tags$a(href = 'https://arub.cz/', target = '_blank',
+        #          tags$img(src = 'ARUB_logo_bile_RGB_HR.png', height = '60px')))
+      ),
+      "Organizace s oprávněním provádět archeologický výzkum"), 
     id = "mainTab",
     selected = "Hledej",
     windowTitle = "Mapa OAO", 
     lang = "cs",
     theme = shinythemes::shinytheme('sandstone'),
     header = tags$head(
-      tags$style(HTML("
-      footer {
-        position:absolute;
-        bottom:0;
-        width:100%;
-        height:100px;
-        color: white;
-        padding-left: 40px;
-        background-color: #3E3F3A;
-        z-index: 1000;
+      includeHTML(("google-analytics.html")),
+      tags$style(
+        HTML("
+      .navbar-nav > li > a, .navbar-brand {
+        padding-top: 30px !important; 
+        height: 85px;
       }
-    
-      .flex-container {
+      
+      .navbar {
+        min-height: 85px !important;
+      }      
+             
+      .flex-container-logos {
+        position: absolute;
+        right: 40px;
+        top: 5px;
         display: flex;
         align-items: stretch;
-        background-color: #3E3F3A;
       }
-
-      .flex-container > div {
-        background-color: #3E3F3A;
-        color: white;
-        margin: 10px;
+      
+      .flex-container-logos > div {
+        margin-left: 20px;
         text-align: center;
         line-height: 75px;
         font-size: 12px;
       }
-      
+                      
       .js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar {
         background: #3E3F3A;
         opacity: 0.6;
@@ -117,20 +133,20 @@ ui <- function(request) {
       }
       "))
     ),
-    footer = tags$footer(
-      tags$div(
-        class = 'flex-container',
-        tags$div(style = 'flex-grow: 1', 
-                 tags$a(href = 'https://www.arup.cas.cz/', target = '_blank',
-                        tags$img(src = 'ARU_logo_bile.png', height = '60px'))),
-        tags$div(style = 'flex-grow: 1', 
-                 tags$a(href = 'https://www.aiscr.cz/', target = '_blank',
-                        tags$img(src = 'AISCR_CZ_H_White.png', height = '75px'))),
-        tags$div(style = 'flex-grow: 1', 
-                 tags$a(href = 'https://arub.avcr.cz/', target = '_blank',
-                        tags$img(src = 'ARUB_logo_bile_RGB_HR.png', height = '80px')))
-      )
-    ), 
+    # footer = tags$footer(
+    #   tags$div(
+    #     class = 'flex-container',
+    #     tags$div(style = 'flex-grow: 1', 
+    #              tags$a(href = 'https://www.arup.cas.cz/', target = '_blank',
+    #                     tags$img(src = 'ARU_logo_bile.png', height = '60px'))),
+    #     tags$div(style = 'flex-grow: 1', 
+    #              tags$a(href = 'https://www.aiscr.cz/', target = '_blank',
+    #                     tags$img(src = 'AISCR_CZ_H_White.png', height = '75px'))),
+    #     tags$div(style = 'flex-grow: 1', 
+    #              tags$a(href = 'https://arub.cz/', target = '_blank',
+    #                     tags$img(src = 'ARUB_logo_bile_RGB_HR.png', height = '80px')))
+    #   )
+    # ), 
     
     
     # Small map ---------------------------------------------------------------
@@ -141,7 +157,7 @@ ui <- function(request) {
       icon = icon("fas fa-search"),
       fluidRow(
         column(6,
-               tags$style(type = "text/css", "#small_map {height: calc(100vh - 200px) !important;}"),
+               tags$style(type = "text/css", "#small_map {height: calc(100vh - 120px) !important;}"),
                leafletOutput("small_map") %>% 
                  withSpinner(image = spinner)
         ),
@@ -209,7 +225,7 @@ ui <- function(request) {
       icon = icon("fas fa-map"),
       sidebarLayout(
         sidebarPanel(
-          width = 6,
+          width = 4,
           fluidRow(
             column(7,
                    selectInput("oao", "Organizace:", 
@@ -239,8 +255,8 @@ ui <- function(request) {
           # shinythemes::themeSelector()
         ),
         mainPanel(
-          width = 6,
-          tags$style(type = "text/css", "#map {height: calc(100vh - 200px) !important;}"),
+          width = 8,
+          tags$style(type = "text/css", "#map {height: calc(100vh - 120px) !important;}"),
           leafletOutput("map") %>% 
             withSpinner(image = spinner)
         ),
@@ -285,6 +301,41 @@ ui <- function(request) {
 # Define server logic -----------------------------------------------------
 
 server <- function(input, output, session) {
+  
+  
+  # Welcome -----------------------------------------------------------------
+  
+  welcome <- modalDialog(
+    title = "Vítejte!",
+    easyClose = TRUE, 
+    size = "l",
+    "Aplikace poskytuje přehled platných oprávnění provádět archeologické 
+    výzkumy ve smyslu",
+    HTML("<a href='https://www.zakonyprolidi.cz/cs/1987-20' target=_blank>",
+         "zákona č. 20/1987 Sb., o státní památkové péči</a>."),
+    "Pro podání oznámení o stavebním či jiném záměru využijte prosím online
+    formulář",
+    HTML("<a href='https://backend.aiscr.cz/oznameni/0/', target=_blank>zde</a>."),
+    "Pro informace pro amatérské spolupracovníky přejděte na web",
+    HTML("<a href='http://www.archeologickamapa.cz/?page=pas' target=_blank>AMČR-PAS</a>."),
+    tags$hr(), "Aplikaci provozují",
+    HTML("<a href='https://www.arup.cas.cz/' target=_blank>Archeologický ústav AV ČR, Praha, v.v.i.</a>"),
+    "a", HTML("<a href='https://arub.cz/' target=_blank>Archeologický ústav AV ČR, Brno, v.v.i.</a>"),
+    "a je součástí infrastruktury",
+    HTML("<a href='https://www.aiscr.cz/' target=_blank>Archeologický informační systém ČR</a>."),
+    tags$div(style="text-align: center;",
+             tags$a(href = 'https://www.arup.cas.cz/', target = '_blank',
+                    tags$img(src = 'ARU_logo_hnede.png', height = '90px')),
+             tags$a(href = 'https://www.aiscr.cz/', target = '_blank',
+                    tags$img(src = 'AISCR_CZ_H_CMYK_Pozitiv.png', height = '80px')),
+             tags$a(href = 'https://arub.cz/', target = '_blank',
+                    tags$img(src = 'ARUB_logo_cerne_RGB_HR.png', height = '90px')),
+    ),
+    footer = modalButton(label = "Zavřít")
+  )
+  
+  # Show the model on start up ...
+  showModal(welcome)
   
   
   # Input from URL ----------------------------------------------------------
@@ -537,7 +588,8 @@ server <- function(input, output, session) {
     
     if (!input$grid) {
       leafletProxy("map") %>%
-        removeShape(oao_grid_flt()$ctverec)
+        removeShape(oao_grid_flt()$ctverec) %>% 
+        removeControl("legend")
     }
     
     if (!input$poly & !input$grid) {
@@ -545,13 +597,19 @@ server <- function(input, output, session) {
         clearShapes()
     }
     
+    # add grid
     if (input$grid) {
       pal <- colorNumeric(palette = "YlGnBu", domain = oao_grid_flt()$scaled)
       leafletProxy("map", data = oao_grid_flt()) %>% 
         addPolygons(layerId = oao_grid_flt()$ctverec, color = ~pal(scaled), 
-                    stroke =  FALSE, fillOpacity = 0.6)
+                    stroke =  FALSE, fillOpacity = 0.6) %>% 
+        # leafem::addLogo(img = "legenda.png", position = "bottomleft", 
+        #                 alpha = 0.4,  width = 110, height = 40, offset.x = 20)
+        addControl("<img src='legend.png' width=110 height=40>", 
+                   position = "bottomleft", layerId = "legend")
     }
     
+    # add polygons
     if (input$poly) {
       leafletProxy("map", data = oao_scope_flt()) %>%
         addPolygons(layerId = "poly", fill = NA, color = "#3E3F3A", weight = 6)
@@ -680,7 +738,7 @@ server <- function(input, output, session) {
         options = list(
           # pageLength = 40,
           deferRender = TRUE,
-          scrollY = "calc(100vh - 300px)", 
+          scrollY = "calc(100vh - 220px)", 
           scroller = TRUE,
           columnDefs = list(list(className = 'dt-left', targets = "_all"))
         )
