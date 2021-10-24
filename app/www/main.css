@@ -1,0 +1,105 @@
+
+.container-fluid {
+  padding-right: 0px;
+  padding-left: 0px;
+}
+
+.router {
+  padding: 2rem 2rem;
+}
+
+.navbar {
+  background-color: #3E3F3A;
+  margin-bottom: 0px;
+}
+
+.navbar-nav {
+  padding: 15px 0px;
+  font-variant: small-caps;
+  letter-spacing: 0.6px;
+}
+
+.navbar-logo {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  margin-right: 20px;
+}
+
+.navbar-brand {
+  margin-bottom: 0px;
+}
+
+.navbar-header {
+  padding: 15px 2rem;
+}
+
+#clickmap {
+  height: calc(100vh - 125px) !important;
+}
+
+#map {
+  height: calc(100vh - 125px) !important;
+}
+
+hr {
+  border-top: 2px solid #3E3F3A80;
+}
+
+/*
+.js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar {
+  background: #3E3F3A;
+  opacity: 0.6;
+}
+*/
+
+/*
+.panel {
+  border-style: none;
+  background-color: #3E3F3A;
+  display: flex;
+  justify-content: flex-start;
+  list-style-type: none;
+  font-family: "Roboto" Sans-Serif; 
+}
+
+.paneltitle {
+  padding: 40px 1.6rem;
+  color: #ffffff; /* #98978b
+  font-variant: small-caps;
+  font-weight: bold;
+}
+
+.paneltab {
+  color: #98978b;
+  display: block;
+  font-size: 1.3rem;
+  padding: 40px 1.6rem;
+  text-decoration: none;
+  transition: all, 0.1s;
+  font-variant: small-caps;
+}
+
+.panellogo {
+  height: 60px;
+  position: absolute;
+  right: 40px;
+  top: 10px;
+  display: flex;
+  align-items: stretch;
+}
+
+a:link, a:visited, a:hover, a:active {
+  text-decoration: none;
+}
+
+a:visited {
+  color: #ffffff;
+  background-color: #98978b;
+}
+
+a:hover {
+  background-color: #98978b;
+  color: #ffffff;
+}
+
+*/
