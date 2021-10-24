@@ -1,752 +1,440 @@
-# Libraries
+# app
+# deployApp(appDir = here::here("app/"), appName = "app_oao")
+
+# packages ----------------------------------------------------------------
+
 library(shiny)
+library(shiny.router)
 library(leaflet)
 library(DT)
-library(shinycssloaders)
+library(dplyr)
+library(sf)
+library(stringr)
 
+source("R/data.R")
+source("R/leaflet_czechrep.R")
+source("R/oao_spatial_filter.R")
 
-# Funs --------------------------------------------------------------------
+# constant ----------------------------------------------------------------
 
-# url main part
-url_main <- "https://knytt.shinyapps.io/map_oao_test/"
-
-add_link <- function(x) {
-  x %>% 
-    dplyr::mutate(text = paste0(
-      "<a href=", url_main, 
-      "?tab=Mapa",
-      "&org=", stringr::str_replace_all(nazev_zkraceny, "\\s", "%20"), ">", 
-      as.character(icon("fas fa-link")), "</a> ", nazev_zkraceny
-    ))
-}
-
+sleep <- 0.1
 icon_ext_link <- icon("fas fa-external-link-alt")
+url_da <- "https://digiarchiv.aiscr.cz/results?entity=projekt&f_organizace="
 
-# Data input ---------------------------------------------------------------
-oao_meta <- sf::st_read(dsn = "oao_meta.geojson") %>% 
-  dplyr::mutate(
-    dplyr::across(dplyr::starts_with("datum"), \(x) format(x, "%d. %m. %Y")),
-    datum_mk = dplyr::if_else(is.na(datum_mk_do),
-                              stringr::str_c("od ", datum_mk_od),
-                              stringr::str_c("od ", datum_mk_od, " do ", datum_mk_do)),
-    datum_av = dplyr::if_else(is.na(datum_av_do),
-                              stringr::str_c("od ", datum_av_od),
-                              stringr::str_c("od ", datum_av_od, " do ", datum_av_do)),
-    dplyr::across(c("datum_av", "datum_mk"), 
-                  \(x) stringr::str_remove_all(x, "(?<=\\s)0")),
-    opravneni = dplyr::if_else(
-      !nazev_zkraceny %in% c("Archeologický ústav Brno", "Archeologický ústav Praha"),
-      dplyr::if_else(
-        !stringr::str_detect(nazev_zkraceny, "ÚAPP"), 
-        paste0(dplyr::if_else(
-          !is.na(datum_mk), 
-          paste0("Platnost oprávnění MK ČR ",
-                 dplyr::if_else(!is.na(dohoda_mk), 
-                                paste0("(", dohoda_mk, ") "), 
-                                ""),
-                 datum_mk, ". "), 
-          ""), 
-          "Dohoda s AV ČR ", datum_av, "."), 
-        paste0(dohoda_mk, ". Dohoda s AV ČR ", datum_av, ".")), 
-      "Oprávnění v plném rozsahu dle zákona o státní památkové péči.")
-  ) %>% 
-  dplyr::arrange(nazev_zkraceny)
 
-oao_scope <- sf::st_read(dsn = "oao_scope.geojson") %>% 
-  add_link()
+# data input --------------------------------------------------------------
 
-oao_grid <- sf::st_read(dsn = "oao_grid.geojson")
+oao_meta <- oao_meta("data/oao_meta.geojson")
+oao_scope <- oao_sf("data/oao_scope.geojson")
+oao_grid <- oao_sf("data/oao_grid.geojson")
 
-# oao scope whole country
-oao_rep <- oao_scope %>% dplyr::filter(area >= 7.8e10) %>% 
+oao_rep <- oao_scope %>% 
+  dplyr::filter(area >= 7.8e10) %>% 
   sf::st_drop_geometry()
 
-# spinner image
-spinner = "aiscr_spinner.gif"
-sleep <- 0.4 # 1.2
 
-# UI definition ------------------------------------------------------------
+# navbar ui ---------------------------------------------------------------
 
-ui <- function(request) {
-  navbarPage(
-    title = tags$div(
-      tags$div(
-        class = 'flex-container-logos',
-        tags$div(
-          style = 'flex-grow: 1',
-          tags$a(href = 'https://www.aiscr.cz/', target = '_blank',
-                 tags$img(src = 'AISCR_CZ_H_White.png', height = '60px'))),
-        # tags$div(
-        #   style = 'flex-grow: 1',
-        #   tags$a(href = 'https://www.arup.cas.cz/', target = '_blank',
-        #          tags$img(src = 'ARU_logo_bile.png', height = '40px'))),
-        # tags$div(
-        #   style = 'flex-grow: 1',
-        #   tags$a(href = 'https://arub.cz/', target = '_blank',
-        #          tags$img(src = 'ARUB_logo_bile_RGB_HR.png', height = '60px')))
-      ),
-      "Organizace s oprávněním provádět archeologický výzkum"), 
-    id = "mainTab",
-    selected = "Hledej",
-    windowTitle = "Mapa OAO", 
-    lang = "cs",
-    theme = shinythemes::shinytheme('sandstone'),
-    header = tags$head(
-      includeHTML(("google-analytics.html")),
-      tags$style(
-        HTML("
-      .navbar-nav > li > a, .navbar-brand {
-        padding-top: 30px !important; 
-        height: 85px;
-      }
-      
-      .navbar {
-        min-height: 85px !important;
-      }      
-             
-      .flex-container-logos {
-        position: absolute;
-        right: 40px;
-        top: 5px;
-        display: flex;
-        align-items: stretch;
-      }
-      
-      .flex-container-logos > div {
-        margin-left: 20px;
-        text-align: center;
-        line-height: 75px;
-        font-size: 12px;
-      }
-                      
-      .js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar {
-        background: #3E3F3A;
-        opacity: 0.6;
-      }
-      
-      .leaflet-control-layers-base {
-        text-align: left;
-      }
-      
-      hr {
-        border-top: 2px solid #3E3F3A80;
-      }
-      "))
+menu <- tags$nav(
+  class = "navbar navbar-inverse navbar-static-top",
+  tags$div(
+    class = "container-fluid",
+    tags$div(
+      class = "navbar-header",
+      tags$p(
+        class = "navbar-brand",
+        "Organizace s oprávněním provádět archeologický výzkum")
     ),
-    # footer = tags$footer(
-    #   tags$div(
-    #     class = 'flex-container',
-    #     tags$div(style = 'flex-grow: 1', 
-    #              tags$a(href = 'https://www.arup.cas.cz/', target = '_blank',
-    #                     tags$img(src = 'ARU_logo_bile.png', height = '60px'))),
-    #     tags$div(style = 'flex-grow: 1', 
-    #              tags$a(href = 'https://www.aiscr.cz/', target = '_blank',
-    #                     tags$img(src = 'AISCR_CZ_H_White.png', height = '75px'))),
-    #     tags$div(style = 'flex-grow: 1', 
-    #              tags$a(href = 'https://arub.cz/', target = '_blank',
-    #                     tags$img(src = 'ARUB_logo_bile_RGB_HR.png', height = '80px')))
-    #   )
-    # ), 
-    
-    
-    # Small map ---------------------------------------------------------------
-    
-    tabPanel(
-      value = "Hledej",
-      title = "Hledej podle polohy", 
-      icon = icon("fas fa-search"),
-      fluidRow(
-        column(6,
-               tags$style(type = "text/css", "#small_map {height: calc(100vh - 120px) !important;}"),
-               leafletOutput("small_map") %>% 
-                 withSpinner(image = spinner)
+    tags$ul(
+      class = "nav navbar-nav",
+      tags$li(
+        a(href = route_link("/"),
+          icon("fas fa-search"), "hledej podle polohy")),
+      tags$li(
+        a(href = route_link("detail"), 
+          icon("fas fa-map"), "mapa působnosti ")),
+      tags$li(
+        a(href = route_link("list"), 
+          icon("fas fa-bars"), "seznam organizací")),
+      tags$li(
+        a(href = route_link("about"), 
+          icon("fas fa-info-circle"),
+          "o aplikaci"))
+    ),
+    tags$div(
+      class = "navbar-right navbar-logo",
+      a(href = 'https://www.aiscr.cz/', target = '_blank',
+        tags$img(src = 'AISCR_CZ_H_White.png', height = '60px')))
+  )
+)
+
+
+# mapclick page -----------------------------------------------------------
+
+# mapclick ui
+mapclick_page <- div(
+  fluidRow(
+    column(
+      6, leafletOutput("clickmap")
+    ),
+    column(
+      6, tabsetPanel(
+        # výzkumy v zadané vzdálenosti provádí tab (grid)
+        tabPanel(
+          "Výzkumy provádí",
+          fluidRow(
+            column(
+              7, tags$div(
+                style = 'padding: 15px;',
+                tags$b("Kliknutím do mapy zvolte bod zájmu."),
+                "V okruhu ",
+                textOutput("buffer", inline = TRUE),
+                " km archeologický výzkum v posledních 5 letech
+                prováděly organizace uvedené v tabulce níže.
+                Organizace jsou řazeny sestupně dle počtu 
+                archeologických výzkumů v zadané vzdálenosti.")
+            ),
+            column(
+              5, tags$div(
+                style = 'padding-top: 10px;',
+                sliderInput("buffer", "Zvolte vzdálenost",
+                            min = 5, max = 20,
+                            value = 5, step = 5,
+                            ticks = FALSE, post = " km")
+              )
+            )
+          ),
+          h4("Výzkumy v zadané vzdálenosti"),
+          tableOutput("tab_grid"),
+          uiOutput("link_da_buffer")
         ),
-        column(6,
-               tabsetPanel(
-                 tabPanel(
-                   "Výzkumy provádí",
-                   fluidRow(
-                     column(7,
-                            tags$div(
-                              style = 'padding: 15px;',
-                              tags$b("Kliknutím do mapy zvolte bod zájmu."),
-                              "V okruhu ",
-                              textOutput("buffer", inline = TRUE, ),
-                              " km archeologický výzkum v posledních 5 letech
-                              prováděly organizace uvedené v tabulce níže.
-                              Organizace jsou řazeny sestupně dle počtu 
-                              archeologických výzkumů v zadané vzdálenosti.")
-                     ),
-                     column(5,
-                            tags$div(
-                              style = 'padding-top: 10px;',
-                              sliderInput("buffer", "Zvolte vzdálenost",
-                                          min = 5, max = 20,
-                                          value = 5, step = 5,
-                                          ticks = FALSE, post = " km")
-                            )
-                     )
-                   ),
-                   h4("Výzkumy v zadané vzdálenosti"),
-                   tableOutput("buffer_table"),
-                   uiOutput("buffer_bbox2")
-                 ),
-                 tabPanel(
-                   "Oprávnění mají",
-                   HTML("<div style = 'padding: 15px;'>
-                      <b>Kliknutím do mapy zvolte bod zájmu.</b>
-                      Na zadaném území mohou archeologický 
-                      výzkum provádět organizace uvedené v tabulce níže.
-                      Organizace jsou řazeny vzestupně dle velikosti území, 
-                      na kterém jsou oprávněny provádět archeologický výzkum.
-                      </div>"),
-                   fluidRow(
-                     column(6, h4("Oprávnění ve vybrané oblasti"), 
-                            tableOutput("click_table")
-                            # withSpinner(color = "#3E3F3A", size = 0.6)
-                     ),
-                     column(6, h4("Oprávnění na celé území ČR"),
-                            tableOutput("republika_table")
-                     )
-                   ),
-                   uiOutput("buffer_bbox1")
-                 )
-               )
+        # oprávnění mají tab (poly)
+        tabPanel(
+          "Oprávnění mají",
+          HTML("<div style = 'padding: 15px;'>
+               <b>Kliknutím do mapy zvolte bod zájmu.</b>
+               Na zadaném území mohou archeologický 
+               výzkum provádět organizace uvedené v tabulce níže.
+               Organizace jsou řazeny vzestupně dle velikosti území, 
+               na kterém jsou oprávněny provádět archeologický výzkum.</div>"),
+          fluidRow(
+            column(
+              6, h4("Oprávnění ve vybrané oblasti"), 
+              tableOutput("tab_poly")
+            ),
+            column(
+              6, h4("Oprávnění na celé území ČR"),
+              tableOutput("tab_rep")
+            )
+          ),
+          uiOutput("link_da_cell")
         )
       )
-    ),
-    
-    
-    # Main map ----------------------------------------------------------------
-    
-    tabPanel(
-      value = "Mapa",
-      title = "Mapa působnosti", 
-      icon = icon("fas fa-map"),
-      sidebarLayout(
-        sidebarPanel(
-          width = 4,
-          fluidRow(
-            column(7,
-                   selectInput("oao", "Organizace:", 
-                               choices = c(Vyberte = "", oao_meta$nazev_zkraceny), 
-                               selectize = TRUE, multiple = FALSE),
-            ),
-            column(5,
-                   checkboxInput("poly", "Zobrazit územní působnost", value = TRUE),
-                   checkboxInput("grid", "Zobrazit akce", value = TRUE)
-            ),
-            # column(4,
-            #        checkboxInput("grid", "Zobrazit akce", value = TRUE)
-            # )
-          ),
-          tags$hr(),
-          tags$h3(htmlOutput("link_local", inline = TRUE),
-                  textOutput("name", inline = TRUE)),
-          tags$p(textOutput("ico", inline = TRUE)),
-          tags$p(htmlOutput("web")),
-          tags$p(htmlOutput("link_da")),
-          tags$h4(textOutput("h4_adresa")),
-          tags$p(htmlOutput("address")),
-          tags$h4(textOutput("h4_opravneni")),
-          tags$p(textOutput("auth_text")),
-          tags$h4(textOutput("h4_uzemi")),
-          tags$p(textOutput("scope_text"))
-          # shinythemes::themeSelector()
-        ),
-        mainPanel(
-          width = 8,
-          tags$style(type = "text/css", "#map {height: calc(100vh - 120px) !important;}"),
-          leafletOutput("map") %>% 
-            withSpinner(image = spinner)
-        ),
-      )
-    ),
-    
-    
-    # Seznam tab ----------------------------------------------------------------
-    
-    tabPanel(
-      value = "Seznam",
-      title = "Seznam organizací", 
-      icon = icon("fas fa-bars"),
-      # fluidRow(
-      #   column(2, selectInput("kraj", "Kraj:",
-      #                         choices = c("Všechny"),
-      #                         selectize = TRUE, multiple = TRUE),
-      #   ),
-      #   column(2, selectInput("ores", "Okres:",
-      #                         choices = c("Všechny"),
-      #                         selectize = TRUE, multiple = TRUE),
-      #   ),
-      # ),
-      tags$div(
-        DT::dataTableOutput("table") %>%
-          withSpinner(image = spinner)
-        # style = "overflow-y: auto; height: calc(100vh - 100px) !important;"
-      )
-    ),
-    
-    # About tab ---------------------------------------------------------------
-    
-    tabPanel(
-      title = "O aplikaci", 
-      icon = icon("fas fa-info-circle"),
-      includeMarkdown("readme.md")
     )
   )
-  
-}
+)
 
-# Define server logic -----------------------------------------------------
-
-server <- function(input, output, session) {
-  
-  
-  # Welcome -----------------------------------------------------------------
-  
-  welcome <- modalDialog(
-    title = "Vítejte!",
-    easyClose = TRUE, 
-    size = "l",
-    "Aplikace poskytuje přehled platných oprávnění provádět archeologické 
-    výzkumy ve smyslu",
-    HTML("<a href='https://www.zakonyprolidi.cz/cs/1987-20' target=_blank>",
-         "zákona č. 20/1987 Sb., o státní památkové péči</a>."),
-    "Pro podání oznámení o stavebním či jiném záměru využijte prosím online
-    formulář",
-    HTML("<a href='https://backend.aiscr.cz/oznameni/0/', target=_blank>zde</a>."),
-    "Pro informace pro amatérské spolupracovníky přejděte na web",
-    HTML("<a href='http://www.archeologickamapa.cz/?page=pas' target=_blank>AMČR-PAS</a>."),
-    tags$hr(), "Aplikaci provozují",
-    HTML("<a href='https://www.arup.cas.cz/' target=_blank>Archeologický ústav AV ČR, Praha, v.v.i.</a>"),
-    "a", HTML("<a href='https://arub.cz/' target=_blank>Archeologický ústav AV ČR, Brno, v.v.i.</a>"),
-    "a je součástí infrastruktury",
-    HTML("<a href='https://www.aiscr.cz/' target=_blank>Archeologický informační systém ČR</a>."),
-    tags$div(style="text-align: center;",
-             tags$a(href = 'https://www.arup.cas.cz/', target = '_blank',
-                    tags$img(src = 'ARU_logo_hnede.png', height = '90px')),
-             tags$a(href = 'https://www.aiscr.cz/', target = '_blank',
-                    tags$img(src = 'AISCR_CZ_H_CMYK_Pozitiv.png', height = '80px')),
-             tags$a(href = 'https://arub.cz/', target = '_blank',
-                    tags$img(src = 'ARUB_logo_cerne_RGB_HR.png', height = '90px')),
-    ),
-    footer = modalButton(label = "Zavřít")
-  )
-  
-  # Show the model on start up ...
-  showModal(welcome)
-  
-  
-  # Input from URL ----------------------------------------------------------
-  
-  # query parameters: 
-  # ?org=Archeo pro
-  
-  # selecting tabs:
-  # ?tab=Mapa ?tab=Hledej ?tab=Seznam
-  
-  observe({
-    url_query <- parseQueryString(session$clientData$url_search)
-    
-    if (!is.null(url_query[["tab"]])) {
-      updateNavlistPanel(session, "mainTab", selected = url_query[["tab"]])
-    }
-    
-    if (!is.null(url_query[["org"]])) {
-      updateTextInput(session, "oao", value = url_query[["org"]])
-    }
-  })
-  
-  # allowing Bookmarking
-  # observe({
-  #   reactiveValuesToList(input)
-  #   session$doBookmark()
-  # })
-  # 
-  # onBookmarked(updateQueryString)
-  
-  # Reactives ---------------------------------------------------------------
-  
-  oao_scope_flt <- reactive({
-    oao_scope %>% 
-      dplyr::filter(nazev_zkraceny == input$oao)
-  })
-  
-  oao_grid_flt <- reactive({
-    oao_grid %>% 
-      dplyr::filter(nazev_zkraceny == input$oao)
-  })
-  
-  oao_meta_flt <- reactive({
-    oao_meta %>% 
-      dplyr::filter(nazev_zkraceny == input$oao)
-  })
+# mapclick server
+mapclick_server <- function(input, output, session) {
   
   output$buffer <- renderText({
     input$buffer
   })
   
-  # Main text -------------------------------------------------------------
-  
-  output$name <- renderText({
-    req(input$oao)
-    oao_meta_flt() %>% 
-      dplyr::pull(nazev_full)
+  output$clickmap <- renderLeaflet({
+    Sys.sleep(sleep)
+    leaflet_map
   })
   
-  output$address <- renderText({
-    req(input$oao)
-    if (input$oao == "MU Brno") {
-      NULL
-    } else {
-      oao_meta_flt() %>% 
-        dplyr::pull(address) %>% 
-        stringr::str_replace(",\\s", "<br>")
-    }
-  })
-  
-  output$ico <- renderText({
-    req(input$oao)
-    oao_meta_flt() %>% 
-      dplyr::pull(ico) %>% 
-      paste0("IČO: ", .)
-  })
-  
-  output$web <- renderText({
-    req(input$oao)
-    oao_web <- oao_meta_flt() %>% 
-      dplyr::pull(web)
+  observeEvent(input$clickmap_click, {
+    # coordinates of map click
+    click_sf <- click2sf(input$clickmap_click)
     
-    if (is.na(oao_web) | oao_web == "https://archeo-muzeo.phil.muni.cz/") {
-      NULL
-    } else {
-      oao_web %>%
-        paste0("<a target=_blank href=", ., ">",
-               icon_ext_link, " ", ., "</a>")
-    }
+    # add marker
+    leaflet_czechrep_add_marker(input$clickmap_click)
+    
+    # filter oao
+    output$tab_poly <- renderTable({
+      oao_filter_poly(oao_scope, click_sf, oao_rep)
+    }, sanitize.text.function = function(x) x)
+    
+    output$tab_grid <- renderTable({
+      oao_filter_grid(oao_grid, click_sf, input$buffer)
+    }, sanitize.text.function = function(x) x)
+    
+    output$tab_rep <- renderTable({
+      oao_rep %>% 
+        dplyr::select(Organizace = nazev_zkraceny)
+    }, sanitize.text.function = function(x) x)
+    
+    # links to da
+    click_buffer_bbox <- reactive({
+      click_buffer(click_sf, input$buffer)
+    })
+    click_cell_bbox <- click_cell(click_sf)
+    
+    output$link_da_buffer <- renderUI({
+      tagList(
+        "Zobrazit vybranou oblast v ",
+        tags$a(
+          icon_ext_link, "Digitálním archivu AMČR.",
+          href = paste0("https://digiarchiv.aiscr.cz/results?mapa=true&loc_rpt=",
+                        click_buffer_bbox()[2], ",", 
+                        click_buffer_bbox()[1], ",",
+                        click_buffer_bbox()[4], ",", 
+                        click_buffer_bbox()[3],
+                        "&entity=projekt"),
+          target = "_blank"
+        ))
+    })
+    
+    output$link_da_cell <- renderUI({
+      tagList(
+        "Zobrazit okolí vybraného bodu v ",
+        tags$a(
+          icon_ext_link, "Digitálním archivu AMČR.",
+          href = paste0("https://digiarchiv.aiscr.cz/results?mapa=true&loc_rpt=",
+                        click_cell_bbox[2], ",", 
+                        click_cell_bbox[1], ",",
+                        click_cell_bbox[4], ",", 
+                        click_cell_bbox[3],
+                        "&entity=projekt"),
+          target = "_blank"
+        ))
+    })
+  })
+}
+
+
+# details page ------------------------------------------------------------
+
+# details ui
+details_page <- div(
+  fluidRow(
+    column(
+      4, fluidRow(
+        column(
+          7, selectInput("oao", "Organizace:", 
+                         choices = c(Vyberte = "", oao_meta$nazev_zkraceny), 
+                         selectize = TRUE, multiple = FALSE),
+        ),
+        column(
+          5, checkboxInput("poly", "Zobrazit územní působnost", value = TRUE),
+          checkboxInput("grid", "Zobrazit akce", value = TRUE)
+        ),
+      ),
+      tags$hr(),
+      uiOutput("detail")
+      # parse as a single html
+      # tags$h3(htmlOutput("link_local", inline = TRUE),
+      #         textOutput("name", inline = TRUE)),
+      # tags$p(textOutput("ico", inline = TRUE)),
+      # tags$p(htmlOutput("web")),
+      # tags$p(htmlOutput("link_da")),
+      # tags$h4(textOutput("h4_adresa")),
+      # tags$p(htmlOutput("address")),
+      # tags$h4(textOutput("h4_opravneni")),
+      # tags$p(textOutput("auth_text")),
+      # tags$h4(textOutput("h4_uzemi")),
+      # tags$p(textOutput("scope_text"))
+    ),
+    column(
+      8, leafletOutput("map")
+    )
+  )
+)
+
+# details server
+details_server <- function(input, output, session) {
+  
+  # reactive data
+  oao_scope_flt <- reactive({
+    oao_filter(oao_scope, input$oao)
+  })
+  oao_grid_flt <- reactive({
+    oao_filter(oao_grid, input$oao)
+  })
+  oao_meta_flt <- reactive({
+    oao_filter(oao_meta, input$oao)
   })
   
-  output$scope_text <- renderText({
-    req(input$oao)
-    oao_meta_flt() %>% 
-      dplyr::pull(uzemi)
-  })
-  
-  output$auth_text <- renderText({
-    req(input$oao)
-    oao_meta_flt() %>% 
-      dplyr::pull(opravneni)
-  })
-  
-  url_da <- "https://digiarchiv.aiscr.cz/results?entity=projekt&f_organizace="
-  
-  output$link_da <- renderText({
-    req(input$oao)
+  # text details
+  output$detail <- renderText({
     if (input$oao == "MU Brno") {
-      paste0(
-        "<h4>Filozofická fakulta – Ústav archeologie a muzeologie</h4>",
-        "<p><a target=_blank href=https://archeo-muzeo.phil.muni.cz/>",
-        icon_ext_link, " https://archeo-muzeo.phil.muni.cz/</a></p>",
-        "<p>Joštova 13<br>60200 Brno</p>",
-        "<p>Projekty v <a target=_blank href=", 
-        url_da, "MU%20Brno%20-%20Filozofická%20fakulta", ">", 
-        icon_ext_link, " Digitálním archivu AMČR</a></p>",
-        "<h4>Přírodovědecká fakulta – Ústav antropologie</h4>",
-        "<p><a target=_blank href=https://anthro.sci.muni.cz/>",
-        icon_ext_link, " https://anthro.sci.muni.cz/</a></p>",
-        "<p>Kotlářská 267/2<br>611 37 Brno</p>",
-        "<p>Projekty v <a target=_blank href=", 
-        url_da, "MU%20Brno%20-%20Přírodovědecká%20fakulta", ">", 
-        icon_ext_link, " Digitálním archivu AMČR</a></p>"
-      )
-    } else if (input$oao == "NPÚ generální ředitelství") {
-      paste0(
-        "NPÚ ú.o.p. Brno – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20ú.o.p.%20Brno>", 
-        icon_ext_link, " DA AMČR</a><br>
-         NPÚ ú.o.p. České Budějovice – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20ú.o.p.%20České%20Budějovice>", 
-        icon_ext_link, " DA AMČR</a><br>
-         NPÚ ú.o.p. Josefov – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20ú.o.p.%20Josefov>", 
-        icon_ext_link, " DA AMČR</a><br>
-         NPÚ ú.o.p. Kroměříž – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20ú.o.p.%20Kroměříž>", 
-        icon_ext_link, " DA AMČR</a><br>
-         NPÚ ú.o.p. Liberec – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20ú.o.p.%20Liberec>", 
-        icon_ext_link, " DA AMČR</a><br>
-         NPÚ ú.o.p. Loket – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20ú.o.p.%20Loket>", 
-        icon_ext_link, " DA AMČR</a><br>
-         NPÚ ú.o.p. Olomouc – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20ú.o.p.%20Olomouc>", 
-        icon_ext_link, " DA AMČR</a><br>
-         NPÚ ú.o.p. Ostrava – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20ú.o.p.%20Ostrava>", 
-        icon_ext_link, " DA AMČR</a><br>
-         NPÚ ú.o.p. Pardubice – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20ú.o.p.%20Pardubice>", 
-        icon_ext_link, " DA AMČR</a><br>
-         NPÚ ú.o.p. Plzeň – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20ú.o.p.%20Plzeň>", 
-        icon_ext_link, " DA AMČR</a><br>
-         NPÚ ú.o.p. Praha – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20ú.o.p.%20Praha>", 
-        icon_ext_link, " DA AMČR</a><br>
-         NPÚ u.o.p. střední Čechy – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20u.o.p.%20střední%20Čechy>", 
-        icon_ext_link, " DA AMČR</a><br>
-         NPÚ ú.o.p. Telč – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20ú.o.p.%20Telč>", 
-        icon_ext_link, " DA AMČR</a><br>
-         NPÚ ú.o.p. Ústí nad Labem – projekty v <a target=_blank href=",
-        url_da, "NPÚ%20ú.o.p.%20Ústí%20nad%20Labem>", 
-        icon_ext_link, " DA AMČR</a><br>
-        "
-      )
+      includeHTML("text/mu_brno.html")
+    } else if (input$oao == "Národní památkový ústav") {
+      includeHTML("text/npu.html")
     } else {
-      oao_meta_flt() %>% 
-        dplyr::pull(nazev_zkraceny) %>% 
-        stringr::str_replace_all("\\s", "%20") %>% 
-        paste0("Zobrazit projekty organizace v ",
-               "<a target=_blank href=",url_da, ., ">", 
-               icon_ext_link, 
-               " Digitálním archivu AMČR</a>.")
+      oao_meta_flt() %>% dplyr::transmute(
+        text = HTML(paste0(
+          "<h3>", nazev_full, "</h3>",
+          "<h4>(", nazev_zkraceny, ")</h4>",
+          "<p>Webové stránky: ", web, "</p>",
+          "<p>IČO: ", ico, "</p>",
+          "<h4>Adresa</h4>",
+          "<p>", address, "</p>",
+          "<h4>Detaily oprávnění</h4>",
+          "<p>", opravneni, "</p>",
+          "<h4>Územní působnost</h4>",
+          "<p>", uzemi, ".</p>",
+          "<p>Zobrazit projekty vybrané organizace v ",
+          "<a href='", url_da, 
+          stringr::str_replace_all(nazev_zkraceny, "\\s", "%20"), 
+          "'>", 
+          icon_ext_link, " Digitálním archivu AMČR", "</a>."
+        ))) %>% 
+        dplyr::pull(text)
     }
   })
   
-  output$link_local <- renderText({
-    req(input$oao)
-    oao_meta_flt() %>% 
-      dplyr::pull(nazev_zkraceny) %>% 
-      stringr::str_replace_all("\\s", "%20") %>% 
-      paste0("<a href=", url_main, "?tab=Mapa&org=", ., ">", 
-             icon("fas fa-link"), "</a>")
-  })
-  
-  output$h4_adresa <- renderText({
-    req(input$oao)
-    if (input$oao == "MU Brno") {
-      NULL
-    } else {
-      paste0("Adresa")
-    }
-  })
-  
-  output$h4_uzemi <- renderText({
-    req(input$oao)
-    paste0("Územní působnost")
-  })
-  
-  output$h4_opravneni <- renderText({
-    req(input$oao)
-    paste0("Detaily oprávnění")
-  })
-  
-  
-  # Main map -----------------------------------------------------------------
-  
-  leaflet_map <- oao_scope %>% 
-    leaflet(options = leafletOptions(minZoom = 7, maxZoom = 14)) %>% 
-    setView(zoom = 7, lng = 15.4730, lat = 49.8175) %>% 
-    setMaxBounds(11, 48, 20, 52) %>%
-    addTiles(group = "Open Street Map") %>% 
-    addProviderTiles(providers$CartoDB.Positron, 
-                     group = "Desaturovaná mapa") %>% 
-    addTiles(urlTemplate = paste0("http://ags.cuzk.cz/arcgis/rest/services/zmwm/",
-                                  "MapServer/tile/{z}/{y}/{x}?blankTile=false"), 
-             attribution = paste0("Základní Mapy ČR ©",
-                                  "<a href='https://www.cuzk.cz/'",
-                                  "target = '_blank'>ČÚZK</a>"), 
-             group = "Základní mapy ČR") %>% 
-    addLayersControl(baseGroups = c(
-      "Desaturovaná mapa", 
-      "Open Street Map", 
-      "Základní mapy ČR"),
-      options = layersControlOptions(collapsed = TRUE))
-  
+  # map
   output$map <- renderLeaflet({
     Sys.sleep(sleep)
     leaflet_map
   })
   
-  # clear map when org is switched
+  # clear map when oao is switched
   observeEvent(input$oao, {
     leafletProxy("map") %>%
       clearShapes()
   })
   
-  # add/remove grid and polygon
+  observeEvent(input$oao, {
+    leafletProxy("map") %>%
+      leaflet::setView(zoom = 8, lng = 15.4730, lat = 49.8175)
+  })
+  
+  # remove grid and polygon
   observe({
-    
     if (!input$poly) {
       leafletProxy("map") %>%
         removeShape("poly")
     }
-    
     if (!input$grid) {
       leafletProxy("map") %>%
-        removeShape(oao_grid_flt()$ctverec) %>% 
+        removeShape(oao_grid_flt()$ctverec) %>%
         removeControl("legend")
     }
-    
     if (!input$poly & !input$grid) {
       leafletProxy("map") %>%
         clearShapes()
     }
-    
+  })
+  
+  # add grid and polygon
+  observe({
+    req(input$oao)
     # add grid
     if (input$grid) {
       pal <- colorNumeric(palette = "YlGnBu", domain = oao_grid_flt()$scaled)
       leafletProxy("map", data = oao_grid_flt()) %>% 
         addPolygons(layerId = oao_grid_flt()$ctverec, color = ~pal(scaled), 
                     stroke =  FALSE, fillOpacity = 0.6) %>% 
-        # leafem::addLogo(img = "legenda.png", position = "bottomleft", 
-        #                 alpha = 0.4,  width = 110, height = 40, offset.x = 20)
         addControl("<img src='legend.png' width=110 height=40>", 
                    position = "bottomleft", layerId = "legend")
     }
     
-    # add polygons
+    # add polygon
     if (input$poly) {
       leafletProxy("map", data = oao_scope_flt()) %>%
         addPolygons(layerId = "poly", fill = NA, color = "#3E3F3A", weight = 6)
     }
-    
   })
+}
+
+
+# list page ---------------------------------------------------------------
+
+list_page <- div(
+  DT::dataTableOutput("table")
+)
+
+# list server
+list_server <- function(input, output, session) {
   
-  # Small map ---------------------------------------------------------------
-  
-  output$small_map <- renderLeaflet({
-    Sys.sleep(sleep)
-    leaflet_map
-  })
-  
-  observe({
-    # coordinates of map click
-    click <- input$small_map_click
-    
-    if (!is.null(click)) {
-      
-      leafletProxy("small_map") %>%
-        clearMarkers() %>%
-        addCircleMarkers(click$lng, click$lat, 
-                         color = "#3E3F3A", radius = 16, 
-                         stroke = TRUE, fillOpacity = 0.6,
-                         popup = "Zvolená poloha")
-      
-      # point click
-      click_sf <- sf::st_as_sf(data.frame(click), 
-                               coords = c("lng", "lat"), crs = 4326)
-      
-      # oprávnění mají
-      scope_pred <- sf::st_intersects(oao_scope, click_sf)
-      
-      click_oao <- sf::st_drop_geometry(oao_scope)[scope_pred %>% lengths() > 0, ] %>% 
-        dplyr::arrange(area) %>% 
-        dplyr::filter(!nazev_zkraceny %in% oao_rep$nazev_zkraceny) %>% 
-        dplyr::select(Organizace = text)
-      
-      # click table
-      output$click_table <- renderTable({
-        click_oao
-      }, sanitize.text.function = function(x) x)
-      
-      # click link
-      click_bbox1 <- sf::st_bbox(sf::st_buffer(click_sf, 1e3))
-      
-      output$buffer_bbox1 <- renderUI({
-        tagList(
-          "Zobrazit okolí vybraného bodu v ",
-          tags$a(
-            icon_ext_link, "Digitálním archivu AMČR.", 
-            href = paste0("https://digiarchiv.aiscr.cz/results?mapa=true&loc_rpt=", 
-                          click_bbox1[2], ",", click_bbox1[1], ",", 
-                          click_bbox1[4], ",", click_bbox1[3],
-                          "&entity=projekt"),
-            target = "_blank"
-          ))
-      })
-      
-      # výzkumy provádí (grid table)
-      grid_pred <- sf::st_intersects(oao_grid, 
-                                     sf::st_buffer(click_sf, input$buffer * 1e3))
-      
-      buffer_oao <- sf::st_drop_geometry(oao_grid)[grid_pred %>% lengths() > 0, ] %>% 
-        dplyr::group_by(nazev_zkraceny) %>% 
-        dplyr::summarize(value = sum(value)) %>% 
-        dplyr::arrange(dplyr::desc(value)) %>% 
-        add_link() %>% 
-        dplyr::select(Organizace = text)
-      
-      # buffer table
-      output$buffer_table <- renderTable({
-        buffer_oao
-      }, sanitize.text.function = function(x) x)
-      
-      # buffer bbox
-      click_bbox2 <- sf::st_bbox(sf::st_buffer(click_sf, input$buffer * 1e3))
-      
-      output$buffer_bbox2 <- renderUI({
-        tagList(
-          "Zobrazit vybranou oblast v ",
-          tags$a(
-            icon_ext_link, "Digitálním archivu AMČR.", 
-            href = paste0("https://digiarchiv.aiscr.cz/results?mapa=true&loc_rpt=", 
-                          click_bbox2[2], ",", click_bbox2[1], ",", 
-                          click_bbox2[4], ",", click_bbox2[3],
-                          "&entity=projekt"),
-            target = "_blank"
-          ))
-      })
-    }
-  })
-  
-  # oao scope republika table
-  output$republika_table <- renderTable({
-    oao_rep %>% 
-      dplyr::select(Organizace = text)
-  }, sanitize.text.function = function(x) x)
-  
-  # Seznam ---------------------------------------------------------------
-  
+  # DT table
   output$table <- DT::renderDataTable({
-    Sys.sleep(sleep)
     oao_meta %>% 
       sf::st_drop_geometry() %>%
-      add_link() %>% 
       dplyr::mutate(
-        web = dplyr::if_else(!is.na(web), 
-                             paste0("<a target=_blank href=", web, ">",
-                                    icon_ext_link, " ", 
-                                    web, "</a>"), 
-                             "")
-      ) %>% 
-      dplyr::select(text, web, ico, address) %>% 
+        nazev = paste0("<b>", nazev_full, "</b><br>(", nazev_zkraceny, ")")) %>% 
+      dplyr::select(nazev, ico, web, address) %>% 
       DT::datatable(
         escape = FALSE,
         extensions = 'Scroller', 
         rownames = FALSE,
-        # height = '240px',
         colnames = c(
-          "Organizace" = "text",
-          "Webové stránky" = "web",
+          "Organizace" = "nazev",
           "IČO" = "ico", 
+          "Webové stránky" = "web",
           "Adresa" = "address"),
         options = list(
-          # pageLength = 40,
           deferRender = TRUE,
-          scrollY = "calc(100vh - 220px)", 
+          scrollY = "calc(100vh - 240px)", 
           scroller = TRUE,
           columnDefs = list(list(className = 'dt-left', targets = "_all"))
         )
       )
   })
+  
 }
 
 
-# Run the App -------------------------------------------------------------
+# about page --------------------------------------------------------------
 
-shinyApp(ui, server, enableBookmarking = "url")
+about_page <- div(
+  includeMarkdown("text/about.md")
+)
+
+
+# server calls ------------------------------------------------------------
+
+leaflet_map <- oao_scope %>% 
+  leaflet_czechrep()
+
+
+# router ------------------------------------------------------------------
+
+router <- make_router(
+  route("/", mapclick_page, mapclick_server),
+  route("detail", details_page, details_server),
+  route("list", list_page, list_server),
+  route("about", about_page)
+)
+
+
+# ui ----------------------------------------------------------------------
+
+ui <- fluidPage(
+  title = "Mapa OAO",
+  theme = "main.css",
+  tags$head(includeHTML("google-analytics.html")),
+  menu,
+  router$ui,
+)
+
+
+# server ------------------------------------------------------------------
+
+server <- function(input, output, session) {
+  router$server(input, output, session)
+  
+  # greeter ---------------------------------------------------------------
+  
+  greeter <- modalDialog(
+    title = "Vítejte!",
+    easyClose = TRUE, 
+    size = "l",
+    includeHTML("text/greeter.html"),
+    footer = modalButton(label = "Zavřít")
+  )
+  
+  showModal(greeter)
+  
+}
+
+
+# app ---------------------------------------------------------------------
+
+shinyApp(ui, server)
+
