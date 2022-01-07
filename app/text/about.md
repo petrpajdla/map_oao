@@ -28,6 +28,6 @@ Pro oznámení o stavebním či jiném záměru využijte prosím online formul�
 
 Zdrojový kód je dostupný na <a href="https://github.com/ARUP-CAS/aiscr-oao" target="_blank">GitHub</a>, pokud najdete chybu, neváhejte přidat <a href="https://github.com/petrpajdla/map_oao/issues/new" target="_blank">issue</a>.
 
-Vytvořeno v <a href="https://shiny.rstudio.com/" target="_blank"><img src="https://www.rstudio.com/wp-content/uploads/2014/04/shiny.png" height="30px"></a> od <a href="https://www.rstudio.com/" target="_blank"><img src="https://www.rstudio.com/wp-content/uploads/2014/07/RStudio-Logo-Blue-Gray.png" height="30px"></a>
+Vytvořeno v <a href="https://shiny.rstudio.com/" target="_blank"><img src="https://www.rstudio.com/wp-content/uploads/2014/04/shiny.png" height="30px"></a> od <a href="https://www.rstudio.com/" target="_blank"><img src="https://www.rstudio.com/assets/img/logo.svg" height="26px"></a>
 
 
