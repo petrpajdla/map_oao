@@ -12,12 +12,14 @@ library(sf)
 library(stringr)
 
 source("R/data.R")
-source("R/leaflet_czechrep.R")
 source("R/oao_spatial_filter.R")
+source("R/leaflet_czechrep.R")
+source("R/dt_meta.R")
+
 
 # constant ----------------------------------------------------------------
 
-sleep <- 0.1
+sleep <- 0.4
 icon_ext_link <- icon("fas fa-external-link-alt")
 url_da <- "https://digiarchiv.aiscr.cz/results?entity=projekt&f_organizace="
 
@@ -31,6 +33,14 @@ oao_grid <- oao_sf("data/oao_grid.geojson")
 oao_rep <- oao_scope %>% 
   dplyr::filter(area >= 7.8e10) %>% 
   sf::st_drop_geometry()
+
+oao_names_tab <- oao_meta %>% 
+  sf::st_drop_geometry() %>% 
+  dplyr::select(ico, nazev) %>% 
+  dplyr::arrange(nazev)
+
+oao_names_vec <- oao_names_tab$nazev %>% 
+  setNames(oao_names_tab$ico)
 
 
 # navbar ui ---------------------------------------------------------------
@@ -155,16 +165,17 @@ mapclick_server <- function(input, output, session) {
     
     # filter oao
     output$tab_poly <- renderTable({
-      oao_filter_poly(oao_scope, click_sf, oao_rep)
+      oao_filter_poly(oao_scope, click_sf, oao_rep, oao_names_vec)
     }, sanitize.text.function = function(x) x)
     
     output$tab_grid <- renderTable({
-      oao_filter_grid(oao_grid, click_sf, input$buffer)
+      oao_filter_grid(oao_grid, click_sf, input$buffer, oao_names_vec)
     }, sanitize.text.function = function(x) x)
     
     output$tab_rep <- renderTable({
       oao_rep %>% 
-        dplyr::select(Organizace = nazev_zkraceny)
+        dplyr::mutate(name = oao_names_vec[ico]) %>% 
+        dplyr::select(Organizace = name)
     }, sanitize.text.function = function(x) x)
     
     # links to da
@@ -212,31 +223,21 @@ mapclick_server <- function(input, output, session) {
 details_page <- div(
   fluidRow(
     column(
-      4, fluidRow(
+      4, selectInput("oao", "Organizace:", 
+                     choices = c(Vyberte = "", 
+                                 setNames(oao_names_tab$ico, 
+                                          oao_names_tab$nazev)),
+                     selectize = TRUE, multiple = FALSE, width = "100%"),
+      fluidRow(
         column(
-          7, selectInput("oao", "Organizace:", 
-                         choices = c(Vyberte = "", oao_meta$nazev_zkraceny), 
-                         selectize = TRUE, multiple = FALSE),
+          6, checkboxInput("poly", "Zobrazit územní působnost", value = TRUE)
         ),
         column(
-          5, checkboxInput("poly", "Zobrazit územní působnost", value = TRUE),
-          checkboxInput("grid", "Zobrazit akce", value = TRUE)
-        ),
+          6, checkboxInput("grid", "Zobrazit akce", value = TRUE)
+        )
       ),
       tags$hr(),
       uiOutput("detail")
-      # parse as a single html
-      # tags$h3(htmlOutput("link_local", inline = TRUE),
-      #         textOutput("name", inline = TRUE)),
-      # tags$p(textOutput("ico", inline = TRUE)),
-      # tags$p(htmlOutput("web")),
-      # tags$p(htmlOutput("link_da")),
-      # tags$h4(textOutput("h4_adresa")),
-      # tags$p(htmlOutput("address")),
-      # tags$h4(textOutput("h4_opravneni")),
-      # tags$p(textOutput("auth_text")),
-      # tags$h4(textOutput("h4_uzemi")),
-      # tags$p(textOutput("scope_text"))
     ),
     column(
       8, leafletOutput("map")
@@ -260,23 +261,25 @@ details_server <- function(input, output, session) {
   
   # text details
   output$detail <- renderText({
-    if (input$oao == "MU Brno") {
-      includeHTML("text/mu_brno.html")
-    } else if (input$oao == "Národní památkový ústav") {
-      includeHTML("text/npu.html")
+    req(input$oao)
+    if (!is.na(oao_meta_flt()$spec_text)) {
+      includeHTML(paste0("text/", oao_meta_flt()$spec_text, ".html"))
     } else {
       oao_meta_flt() %>% dplyr::transmute(
         text = HTML(paste0(
-          "<h3>", nazev_full, "</h3>",
-          "<h4>(", nazev_zkraceny, ")</h4>",
+          "<h3>", nazev, "</h3>",
+          # "<h4>(", nazev_zkraceny, ")</h4>",
           "<p>Webové stránky: ", web, "</p>",
           "<p>IČO: ", ico, "</p>",
           "<h4>Adresa</h4>",
-          "<p>", address, "</p>",
+          "<p>", adresa, "</p>",
           "<h4>Detaily oprávnění</h4>",
           "<p>", opravneni, "</p>",
+          if (!is.na(note)) {
+            paste0("<p>", note, "</p>")
+          },
           "<h4>Územní působnost</h4>",
-          "<p>", uzemi, ".</p>",
+          "<p>", uzemi, "</p>",
           "<p>Zobrazit projekty vybrané organizace v ",
           "<a href='", url_da, 
           stringr::str_replace_all(nazev_zkraceny, "\\s", "%20"), 
@@ -315,10 +318,10 @@ details_server <- function(input, output, session) {
         removeShape(oao_grid_flt()$ctverec) %>%
         removeControl("legend")
     }
-    if (!input$poly & !input$grid) {
-      leafletProxy("map") %>%
-        clearShapes()
-    }
+    # if (!input$poly & !input$grid) {
+    #   leafletProxy("map") %>%
+    #     clearShapes()
+    # }
   })
   
   # add grid and polygon
@@ -346,35 +349,34 @@ details_server <- function(input, output, session) {
 # list page ---------------------------------------------------------------
 
 list_page <- div(
+  selectInput("oao_multiple", "Filtrovat organizace:", 
+              choices = c(Vyberte = "", 
+                          setNames(oao_names_tab$ico, 
+                                   oao_names_tab$nazev)),
+              selectize = TRUE, multiple = TRUE, width = "100%"),
   DT::dataTableOutput("table")
 )
 
 # list server
 list_server <- function(input, output, session) {
   
+  oao_meta_multi_flt <- reactive({
+    oao_filter(oao_meta, input$oao_multiple)
+  })
+  
   # DT table
   output$table <- DT::renderDataTable({
-    oao_meta %>% 
-      sf::st_drop_geometry() %>%
-      dplyr::mutate(
-        nazev = paste0("<b>", nazev_full, "</b><br>(", nazev_zkraceny, ")")) %>% 
-      dplyr::select(nazev, ico, web, address) %>% 
-      DT::datatable(
-        escape = FALSE,
-        extensions = 'Scroller', 
-        rownames = FALSE,
-        colnames = c(
-          "Organizace" = "nazev",
-          "IČO" = "ico", 
-          "Webové stránky" = "web",
-          "Adresa" = "address"),
-        options = list(
-          deferRender = TRUE,
-          scrollY = "calc(100vh - 240px)", 
-          scroller = TRUE,
-          columnDefs = list(list(className = 'dt-left', targets = "_all"))
-        )
-      )
+    if (!is.null(input$oao_multiple)) {
+      oao_meta_multi_flt() %>% 
+        sf::st_drop_geometry() %>% 
+        dt_data_prep() %>% 
+        dt_create()
+    } else {
+      oao_meta %>% 
+        sf::st_drop_geometry() %>% 
+        dt_data_prep() %>% 
+        dt_create()
+    }
   })
   
 }
