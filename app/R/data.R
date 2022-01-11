@@ -10,6 +10,7 @@
 #' @examples
 oao_meta <- function(dsn) {
   sf::st_read(dsn = dsn) %>% 
+    sf::st_drop_geometry() %>% 
     dplyr::mutate(
       dplyr::across(dplyr::ends_with(c("from", "to")), \(x) format(x, "%d. %m. %Y")),
       datum_mk = dplyr::if_else(is.na(mk_to),
