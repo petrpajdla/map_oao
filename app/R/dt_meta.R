@@ -48,8 +48,8 @@ dt_data_prep <- function(data) {
           stringr::str_wrap(x, width = 36), "\\n", "<br>")),
       dplyr::across(
         dplyr::ends_with(
-          c("from", "to")), 
-        \(x) lubridate::dmy(x)),
+          c("from", "to")),
+        \(x) as.Date(x, format = "%d. %m. %Y")),
     ) %>% 
     dplyr::select(nazev, ico, web, adresa, mk_to, av_to)
 }
