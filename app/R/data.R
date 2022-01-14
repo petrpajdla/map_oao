@@ -8,7 +8,7 @@
 #' @export
 #'
 #' @examples
-oao_meta <- function(dsn) {
+oao_meta <- function(dsn, client_url) {
   sf::st_read(dsn = dsn) %>% 
     sf::st_drop_geometry() %>% 
     dplyr::mutate(

@@ -20,9 +20,22 @@ source("R/dt_meta.R")
 # constant ----------------------------------------------------------------
 
 sleep <- 0.4
-icon_ext_link <- icon("fas fa-external-link-alt")
 url_da <- "https://digiarchiv.aiscr.cz/results?entity=projekt&f_organizace="
+url_da_coords <- "https://digiarchiv.aiscr.cz/results?mapa=true&loc_rpt="
+icon_ext_link <- icon("fas fa-external-link-alt") # "fas fa-link"
+icon_map_link <<- icon("fas fa-map-marked-alt")
 
+
+# ui funs -----------------------------------------------------------------
+
+select_oao <- function(inputId, label, multiple = FALSE) {
+  selectInput(inputId, label, 
+              choices = c(Vyberte = "", 
+                          setNames(oao_names_tab$ico, 
+                                   oao_names_tab$nazev)),
+              selectize = TRUE, multiple = multiple, 
+              width = "100%")
+}
 
 # data input --------------------------------------------------------------
 
@@ -170,33 +183,38 @@ mapclick_server <- function(input, output, session) {
   # filter oao
   output$tab_poly <- renderTable({
     req(input$clickmap_click)
-    oao_filter_poly(oao_scope, click_sf(), oao_rep, oao_names_vec)
-  }, sanitize.text.function = function(x) x)
+    oao_filter_poly(oao_scope, click_sf(), oao_rep, 
+                    oao_names_vec, client_url())
+  }, align = "cl", sanitize.text.function = function(x) x)
   
   output$tab_grid <- renderTable({
     req(input$clickmap_click)
-    oao_filter_grid(oao_grid, click_sf(), input$buffer, oao_names_vec)
-  }, sanitize.text.function = function(x) x)
+    oao_filter_grid(oao_grid, click_sf(), input$buffer, 
+                    oao_names_vec, client_url())
+  }, align = "cl", sanitize.text.function = function(x) x)
   
   output$tab_rep <- renderTable({
     oao_rep %>% 
-      dplyr::mutate(name = oao_names_vec[ico]) %>% 
-      dplyr::select(Organizace = name)
-  }, sanitize.text.function = function(x) x)
+      dplyr::mutate(name = oao_names_vec[ico],
+                    link = paste0("<a href='", client_url(), 
+                                  "detail?oao=", ico, "/'>", 
+                                  icon_map_link, "</a>")) %>% 
+      dplyr::select(Detail = link, Organizace = name)
+  }, align = "cl", sanitize.text.function = function(x) x)
   
   # links to da
   # buffer around the click
   click_buffer_bbox <- reactive({
     click_buffer(click_sf(), input$buffer)
   })
-
+  
   output$link_da_buffer <- renderUI({
     req(input$clickmap_click)
     tagList(
       "Zobrazit vybranou oblast v ",
       tags$a(
         icon_ext_link, "Digitálním archivu AMČR.",
-        href = paste0("https://digiarchiv.aiscr.cz/results?mapa=true&loc_rpt=",
+        href = paste0(url_da_coords,
                       click_buffer_bbox()[2], ",",
                       click_buffer_bbox()[1], ",",
                       click_buffer_bbox()[4], ",",
@@ -205,19 +223,19 @@ mapclick_server <- function(input, output, session) {
         target = "_blank"
       ))
   })
-
+  
   # box/cell of the given click
   click_cell_bbox <- reactive({
     click_cell(click_sf())
   })
-
+  
   output$link_da_cell <- renderUI({
     req(input$clickmap_click)
     tagList(
       "Zobrazit okolí vybraného bodu v ",
       tags$a(
         icon_ext_link, "Digitálním archivu AMČR.",
-        href = paste0("https://digiarchiv.aiscr.cz/results?mapa=true&loc_rpt=",
+        href = paste0(url_da_coords,
                       click_cell_bbox()[2], ",",
                       click_cell_bbox()[1], ",",
                       click_cell_bbox()[4], ",",
@@ -235,11 +253,7 @@ mapclick_server <- function(input, output, session) {
 details_page <- div(
   fluidRow(
     column(
-      4, selectInput("oao", "Organizace:", 
-                     choices = c(Vyberte = "", 
-                                 setNames(oao_names_tab$ico, 
-                                          oao_names_tab$nazev)),
-                     selectize = TRUE, multiple = FALSE, width = "100%"),
+      4, select_oao("oao", label = "Organizace:", multiple = FALSE),
       fluidRow(
         column(
           6, checkboxInput("poly", "Zobrazit územní působnost", value = TRUE)
@@ -349,11 +363,8 @@ details_server <- function(input, output, session) {
 # list page ---------------------------------------------------------------
 
 list_page <- div(
-  selectInput("oao_multiple", "Filtrovat organizace:", 
-              choices = c(Vyberte = "", 
-                          setNames(oao_names_tab$ico, 
-                                   oao_names_tab$nazev)),
-              selectize = TRUE, multiple = TRUE, width = "100%"),
+  select_oao("oao_multiple", label = "Filtrovat organizace:", 
+             multiple = TRUE),
   DT::dataTableOutput("table")
 )
 
@@ -368,11 +379,11 @@ list_server <- function(input, output, session) {
   output$table <- DT::renderDataTable({
     if (!is.null(input$oao_multiple)) {
       oao_meta_multi_flt() %>% 
-        dt_data_prep() %>% 
+        dt_data_prep(url = client_url()) %>% 
         dt_create()
     } else {
       oao_meta %>% 
-        dt_data_prep() %>% 
+        dt_data_prep(url = client_url()) %>% 
         dt_create()
     }
   })
@@ -417,6 +428,22 @@ ui <- fluidPage(
 # server ------------------------------------------------------------------
 
 server <- function(input, output, session) {
+  
+  # get current url
+  client_url <<- reactive({
+    client <- reactiveValuesToList(session$clientData)
+    paste0(client$url_protocol, "//",
+           client$url_hostname, ":",
+           client$url_port, client$url_pathname, "#!/")
+  })
+  
+  # observe({
+  #   print(
+  #     # reactiveValuesToList(session$clientData)
+  #     client_url()
+  #     )
+  # })
+  
   router$server(input, output, session)
   
   # greeter ---------------------------------------------------------------
@@ -431,10 +458,18 @@ server <- function(input, output, session) {
   
   showModal(greeter)
   
+  # parsing url parameter ?oao=ico
+  observe({
+    oao_url <- get_query_param(field = "oao")
+    
+    if (!is.null(oao_url)) {
+      updateSelectInput(inputId = "oao", selected = oao_url)
+    }
+  })
 }
 
 
 # app ---------------------------------------------------------------------
 
-shinyApp(ui, server)
+shinyApp(ui, server, enableBookmarking = "url")
 

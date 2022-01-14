@@ -15,17 +15,23 @@ dt_create <- function(data) {
       rownames = FALSE,
       colnames = c(
         "Organizace" = "nazev",
+        "Mapa<br>působnosti" = "link_map",
         "IČO" = "ico",
         "Webové stránky" = "web",
         "Adresa" = "adresa",
-        "PovolenÍ MK ČR" = "mk_to",
-        "Smlouva s AV ČR" = "av_to"),
+        "Platnost oprávnění<br>MK ČR" = "mk_to",
+        "Platnost dohody<br>s AV ČR" = "av_to"),
       options = list(
         dom = "ti",
         deferRender = TRUE,
-        scrollY = "calc(100vh - 280px)", 
+        scrollY = "calc(100vh - 300px)", 
         scroller = TRUE,
-        columnDefs = list(list(className = 'dt-left', targets = "_all"))
+        columnDefs = list(
+          list(
+            # className = 'dt-left', targets = "_all"
+            className = 'dt-center', targets = c(1, 2, 5, 6)
+            )
+          )
       )
     )
 }
@@ -39,7 +45,7 @@ dt_create <- function(data) {
 #' @export
 #'
 #' @examples
-dt_data_prep <- function(data) {
+dt_data_prep <- function(data, url) {
   data %>% 
     dplyr::mutate(
       dplyr::across(
@@ -50,7 +56,9 @@ dt_data_prep <- function(data) {
         dplyr::ends_with(
           c("from", "to")),
         \(x) as.Date(x, format = "%d. %m. %Y")),
+      link_map = paste0("<a href='", url, "detail?oao=", 
+                   ico, "/'>", icon_map_link, "</a>")
     ) %>% 
-    dplyr::select(nazev, ico, web, adresa, mk_to, av_to)
+    dplyr::select(nazev, link_map, ico, web, adresa, mk_to, av_to)
 }
 
