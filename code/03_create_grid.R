@@ -22,17 +22,18 @@ proj <- read_csv(here::here("data/processed", "pian_proj.csv"))
 revised_gd_url <- "https://docs.google.com/spreadsheets/d/1knxDiUuCVqwgzgQkodhGg0vMe6w6LsKiGVqrsvi5dpw/edit#gid=0"
 gd_revised <- googledrive::drive_get(revised_gd_url)
 
+# oao s platnou dohodou
+oao_platne <- googlesheets4::read_sheet(gd_revised, sheet = "oao_webapp") %>%
+  filter(app) %>%
+  pull(ico)
+
 # updated_gd_url <- "https://docs.google.com/spreadsheets/d/1RXXRGpgkrgtBhF9taEtCVuHxVIJcbeATF9RBxBtORJY/edit?usp=sharing"
 # gd_updated <- drive_get(updated_gd_url)
 
 # mapping ico to heslar amcr
-ico_mapping <- googlesheets4::read_sheet(gd_revised, sheet = "oao_heslar_amcr")
+ico_mapping <- googlesheets4::read_sheet(gd_revised, sheet = "oao_heslar_amcr") %>% 
+  filter(ico %in% oao_platne)
 ico <- setNames(ico_mapping$ico, ico_mapping$amcr_nazev_zkraceny)
-
-# # oao s platnou dohodou
-# oao_platne <- googlesheets4::read_sheet(gd_updated, sheet = "Dohody_pracovni") %>% 
-#   filter(dohoda_platna == 1) %>% 
-#   pull(nazev_zkraceny)
 
 # data prep ---------------------------------------------------------------
 
@@ -83,7 +84,7 @@ pian_clean$ico %in% ico %>% all()
 # pian_clean$ico[!pian_clean$ico %in% ico]
 
 # oao without any information in amcr
-ico_mapping$label[!ico %in% pian_clean$ico]
+ico_mapping$label[!ico %in% pian_clean$ico] %>% as_tibble()
 
 # sf ----------------------------------------------------------------------
 
@@ -166,10 +167,10 @@ file.copy(here::here("data/final/oao_grid.geojson"),
 # uappsc <- "49276433"
 # npu <- "75032333"
 # 
-# x <- grids %>% 
-#   filter(ico == uappsc)
+# x <- grids %>%
+#   filter(ico == uapp)
 # 
-# x %>% 
+# x %>%
 #   ggplot() +
 #   geom_sf(data = RCzechia::republika(), fill = "white") +
 #   geom_sf(aes(fill = scaled), alpha = 0.8, color = NA) +
@@ -181,9 +182,9 @@ file.copy(here::here("data/final/oao_grid.geojson"),
 # pal <- leaflet::colorNumeric(palette = "YlGnBu", domain = x$scaled)
 # # YlGn YlGnBu Greens Blues
 # 
-# x %>% 
-#   leaflet::leaflet() %>% 
-#   leaflet::addTiles() %>% 
-#   leaflet::addProviderTiles(provider = leaflet::providers$CartoDB.Positron) %>% 
+# x %>%
+#   leaflet::leaflet() %>%
+#   leaflet::addTiles() %>%
+#   leaflet::addProviderTiles(provider = leaflet::providers$CartoDB.Positron) %>%
 #   leaflet::addPolygons(stroke = F, smoothFactor = 0.2,
 #                        color = ~pal(scaled), fillOpacity = 0.6)

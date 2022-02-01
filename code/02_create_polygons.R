@@ -52,7 +52,9 @@ katastry <- sf::read_sf(here::here("data/raw", "katastry_shp"))
 # uzemni pusobnost --------------------------------------------------------
 
 oao_uzemi <- read_sheet(gd_revised, sheet = "oao_webapp") %>% 
-  select(ico, nazev_zkraceny, starts_with("is"), kraj, okres, katastr)
+  select(ico, app, nazev_zkraceny, starts_with("is"), kraj, okres, katastr) %>% 
+  filter(app) %>% 
+  select(-app)
 
 # oao_uzemi <- read_sheet(gd_updated, sheet = "Uzemi_pracovni") %>% 
 #   filter(nazev_zkraceny %in% oao_platne) %>% 
