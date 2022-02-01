@@ -30,8 +30,8 @@ dt_create <- function(data) {
           list(
             # className = 'dt-left', targets = "_all"
             className = 'dt-center', targets = c(1, 2, 5, 6)
-            )
           )
+        )
       )
     )
 }
@@ -53,11 +53,10 @@ dt_data_prep <- function(data, url) {
         \(x) stringr::str_replace_all(
           stringr::str_wrap(x, width = 36), "\\n", "<br>")),
       dplyr::across(
-        dplyr::ends_with(
-          c("from", "to")),
+        dplyr::ends_with(c("from", "to")), 
         \(x) as.Date(x, format = "%d. %m. %Y")),
       link_map = paste0("<a href='", url, "detail?oao=", 
-                   ico, "/'>", icon_map_link, "</a>")
+                        ico, "/'>", icon_map_link, "</a>")
     ) %>% 
     dplyr::select(nazev, link_map, ico, web, adresa, mk_to, av_to)
 }
