@@ -15,8 +15,8 @@ separate2longer <- function(x, col, ncol) {
 }
 
 add_polygon <- function(x) {
-  x %>% select(nazev_zkraceny, geometry) %>% 
-    group_by(nazev_zkraceny) %>% 
+  x %>% select(ico, geometry) %>% 
+    group_by(ico) %>% 
     nest() %>% 
     mutate(data = map(data, sf::st_as_sf),
            data = map(data, sf::st_union)) %>% 
@@ -25,9 +25,11 @@ add_polygon <- function(x) {
 
 # data --------------------------------------------------------------------
 
-updated_gd_url <- "https://docs.google.com/spreadsheets/d/1RXXRGpgkrgtBhF9taEtCVuHxVIJcbeATF9RBxBtORJY/edit?usp=sharing"
+revised_gd_url <- "https://docs.google.com/spreadsheets/d/1knxDiUuCVqwgzgQkodhGg0vMe6w6LsKiGVqrsvi5dpw/edit#gid=0"
+gd_revised <- drive_get(revised_gd_url)
 
-gd_updated <- drive_get(updated_gd_url)
+# updated_gd_url <- "https://docs.google.com/spreadsheets/d/1RXXRGpgkrgtBhF9taEtCVuHxVIJcbeATF9RBxBtORJY/edit?usp=sharing"
+# gd_updated <- drive_get(updated_gd_url)
 
 # bg data
 kraje <- RCzechia::kraje()
@@ -36,50 +38,59 @@ katastry <- sf::read_sf(here::here("data/raw", "katastry_shp"))
 
 # dataprep ----------------------------------------------------------------
 
-# oao s platnou dohodou
-oao_platne <- read_sheet(gd_updated, sheet = "Dohody_pracovni") %>% 
-  filter(dohoda_platna == 1) %>% 
-  pull(nazev_zkraceny)
+# # oao s platnou dohodou
+# oao_platne <- read_sheet(gd_updated, sheet = "Dohody_pracovni") %>% 
+#   filter(dohoda_platna == 1) %>% 
+#   pull(nazev_zkraceny)
 
-# correct names
-heslar <- read_csv(here::here("data/raw", "heslar_organizace.csv"))
-# NOTE: Manually added NZM Praha to heslar + MU Brno
-oao_platne[!oao_platne %in% heslar$nazev_zkraceny]
-# heslar %>% filter(str_detect(nazev_zkraceny, "Národní"))
+# # correct names
+# heslar <- read_csv(here::here("data/raw", "heslar_organizace.csv"))
+# # NOTE: Manually added NZM Praha to heslar + MU Brno
+# oao_platne[!oao_platne %in% heslar$nazev_zkraceny]
+# # heslar %>% filter(str_detect(nazev_zkraceny, "Národní"))
 
 # uzemni pusobnost --------------------------------------------------------
 
-oao_uzemi <- read_sheet(gd_updated, sheet = "Uzemi_pracovni") %>% 
-  filter(nazev_zkraceny %in% oao_platne) %>% 
-  select(-c_m, -uzemi, -is_praha)
+oao_uzemi <- read_sheet(gd_revised, sheet = "oao_webapp") %>% 
+  select(ico, app, nazev_zkraceny, starts_with("is"), kraj, okres, katastr) %>% 
+  filter(app) %>% 
+  select(-app)
+
+# oao_uzemi <- read_sheet(gd_updated, sheet = "Uzemi_pracovni") %>% 
+#   filter(nazev_zkraceny %in% oao_platne) %>% 
+#   select(-c_m, -uzemi, -is_praha)
 
 # republika
-oao_republika <- oao_uzemi %>% filter(is_republika) %>% 
-  select(nazev_zkraceny) %>% 
+oao_republika <- oao_uzemi %>% 
+  filter(is_rep) %>% 
+  select(ico) %>% 
   bind_cols(RCzechia::republika()) %>% 
-  select(nazev_zkraceny, data = geometry) %>% 
+  select(ico, data = geometry) %>% 
   sf::st_as_sf()
 
 # kraje
-oao_kraje <- oao_uzemi %>% filter(is_kraj) %>% 
-  select(nazev_zkraceny, kraj) %>% 
+oao_kraje <- oao_uzemi %>% 
+  filter(is_kraj) %>% 
+  select(ico, kraj) %>% 
   separate2longer("kraj", 10) %>% 
   left_join(kraje, by = c("value" = "NAZ_CZNUTS3")) %>% 
   add_polygon() %>% 
   sf::st_as_sf()
 
 # okresy
-oao_okresy <- oao_uzemi %>% filter(is_okres) %>% 
-  select(nazev_zkraceny, okres) %>% 
-  separate2longer("okres", 29) %>% 
+oao_okresy <- oao_uzemi %>% 
+  filter(is_okres) %>% 
+  select(ico, okres) %>% 
+  separate2longer("okres", 30) %>% 
   left_join(okresy, by = c("value" = "NAZ_LAU1")) %>% 
   add_polygon() %>% 
   sf::st_as_sf()
 
 # katastry
-oao_katastry <- oao_uzemi %>% filter(is_katastr) %>% 
-  select(nazev_zkraceny, katastr) %>% 
-  separate2longer("katastr", 137) %>% 
+oao_katastry <- oao_uzemi %>% 
+  filter(is_katastr) %>% 
+  select(ico, katastr) %>% 
+  separate2longer("katastr", 200) %>% 
   left_join(katastry, by = c("value" = "NAZ_KU")) %>% 
   add_polygon() %>% 
   sf::st_as_sf() %>% 
@@ -96,7 +107,7 @@ oao_uzemi_poly <- oao_republika %>%
 sf::st_is_valid(oao_uzemi_poly) %>% all()
 
 # missing polygons
-oao_platne[!oao_platne %in% oao_uzemi_poly$nazev_zkraceny]
+all(oao_uzemi$ico %in% oao_uzemi_poly$ico)
 
 
 # total covered area (arranging in tables) --------------------------------
@@ -112,7 +123,7 @@ sf::st_write(oao_uzemi_poly,
 
 # simplify polygons for the web use ---------------------------------------
 
-oao_uzemi_poly_simple <- sf::st_simplify(oao_uzemi_poly, dTolerance = 200)
+oao_uzemi_poly_simple <- sf::st_simplify(oao_uzemi_poly, dTolerance = 150)
 
 sf::st_write(oao_uzemi_poly_simple, 
              here::here("data/final", "oao_territory_poly_simple.geojson"))
@@ -121,15 +132,18 @@ sf::st_write(oao_uzemi_poly_simple,
 # update file for app -----------------------------------------------------
 
 file.copy(here::here("data/final/oao_territory_poly_simple.geojson"),
-          here::here("app/oao_scope.geojson"), overwrite = TRUE)
+          here::here("app/data/oao_scope.geojson"), overwrite = TRUE)
 
 
 
 # playground --------------------------------------------------------------
 
-oao_uzemi_poly_simple <- sf::st_read(here::here("data/final", "oao_territory_poly_simple.geojson"))
+# oao_uzemi_poly_simple <- sf::st_read(here::here("data/final", "oao_territory_poly_simple.geojson"))
 
-
+# oao_katastry %>%
+#   ggplot() +
+#     geom_sf() +
+#     facet_wrap(~ico)
 
 # oao_uzemi_poly_simple %>% 
 #   filter(nazev_zkraceny == "MU Brno") %>% 

@@ -1,15 +1,19 @@
-oao_filter_poly <- function(data, click, rep) {
+oao_filter_poly <- function(data, click, rep, oao_names, url) {
   # oprávnění mají
   poly_pred <- sf::st_intersects(data, click)
   
   sf::st_drop_geometry(data)[poly_pred %>% lengths() > 0, ] %>% 
     dplyr::arrange(area) %>% 
     # removes whole republic oao
-    dplyr::filter(!nazev_zkraceny %in% rep$nazev_zkraceny) %>%
-    dplyr::select(Organizace = nazev_zkraceny)
+    dplyr::filter(!ico %in% rep$ico) %>%
+    dplyr::mutate(name = oao_names[ico],
+                  link = paste0("<a href='", url, 
+                                "detail?oao=", ico, "/'>", 
+                                icon_map_link, "</a>")) %>% 
+    dplyr::select(Detail = link, Organizace = name)
 }
 
-oao_filter_grid <- function(data, click, buffer) {
+oao_filter_grid <- function(data, click, buffer, oao_names, url) {
   # výzkumy provádí
   grid_pred <- sf::st_intersects(
     data,
@@ -17,10 +21,14 @@ oao_filter_grid <- function(data, click, buffer) {
   )
   
   sf::st_drop_geometry(data)[grid_pred %>% lengths() > 0, ] %>%
-    dplyr::group_by(nazev_zkraceny) %>%
+    dplyr::group_by(ico) %>%
     dplyr::summarize(value = sum(value)) %>%
     dplyr::arrange(dplyr::desc(value)) %>%
-    dplyr::select(Organizace = nazev_zkraceny)
+    dplyr::mutate(name = oao_names[ico],
+                  link = paste0("<a href='", url, 
+                                "detail?oao=", ico, "/'>", 
+                                icon_map_link, "</a>")) %>% 
+    dplyr::select(Detail = link, Organizace = name)
 }
 
 click_cell <- function(click) {
@@ -30,4 +38,3 @@ click_cell <- function(click) {
 click_buffer <- function(click, buffer) {
   sf::st_bbox(sf::st_buffer(click, buffer * 1e3))
 }
-

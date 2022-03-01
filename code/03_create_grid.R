@@ -2,8 +2,8 @@
 
 library(tidyverse)
 library(sf)
-library(googledrive)
-library(googlesheets4)
+# library(googledrive)
+# library(googlesheets4)
 
 
 # data  -------------------------------------------------------------------
@@ -16,21 +16,28 @@ akce <- read_csv(here::here("data/processed", "pian_akce.csv"))
 proj <- read_csv(here::here("data/processed", "pian_proj.csv"))
 
 # heslar
-heslar <- read_csv(here::here("data/raw", "heslar_organizace.csv"))
+# heslar <- read_csv(here::here("data/raw", "heslar_organizace.csv"))
 
 # GD data
-updated_gd_url <- "https://docs.google.com/spreadsheets/d/1RXXRGpgkrgtBhF9taEtCVuHxVIJcbeATF9RBxBtORJY/edit?usp=sharing"
-gd_updated <- drive_get(updated_gd_url)
+revised_gd_url <- "https://docs.google.com/spreadsheets/d/1knxDiUuCVqwgzgQkodhGg0vMe6w6LsKiGVqrsvi5dpw/edit#gid=0"
+gd_revised <- googledrive::drive_get(revised_gd_url)
 
 # oao s platnou dohodou
-oao_platne <- read_sheet(gd_updated, sheet = "Dohody_pracovni") %>% 
-  filter(dohoda_platna == 1) %>% 
-  pull(nazev_zkraceny)
+oao_platne <- googlesheets4::read_sheet(gd_revised, sheet = "oao_webapp") %>%
+  filter(app) %>%
+  pull(ico)
+
+# updated_gd_url <- "https://docs.google.com/spreadsheets/d/1RXXRGpgkrgtBhF9taEtCVuHxVIJcbeATF9RBxBtORJY/edit?usp=sharing"
+# gd_updated <- drive_get(updated_gd_url)
+
+# mapping ico to heslar amcr
+ico_mapping <- googlesheets4::read_sheet(gd_revised, sheet = "oao_heslar_amcr") %>% 
+  filter(ico %in% oao_platne)
+ico <- setNames(ico_mapping$ico, ico_mapping$amcr_nazev_zkraceny)
 
 # data prep ---------------------------------------------------------------
 
-# change MU <fakulta> to generic one MU
-# change NPU <uop> to generic NPU
+# map names to ico
 akce_clean <- akce %>% 
   select(ident = ident_cely,
          nazev_zkraceny = organizace,
@@ -42,12 +49,17 @@ akce_clean <- akce %>%
          # pian,
          x = centroid_e,
          y = centroid_n) %>% 
-  mutate(nazev_zkraceny = if_else(str_detect(nazev_zkraceny, "MU Brno"), 
-                                  "MU Brno", nazev_zkraceny),
-         nazev_zkraceny = if_else(str_detect(nazev_zkraceny, "NPÚ"), 
-                                  "NPÚ generální ředitelství", nazev_zkraceny),
-         nazev_zkraceny = if_else(str_detect(nazev_zkraceny, "Archeologický ústav Brno"), 
-                                  "Archeologický ústav Brno", nazev_zkraceny))
+  mutate(
+    ico = unname(ico[nazev_zkraceny])
+    # nazev_zkraceny = if_else(str_detect(nazev_zkraceny, "MU Brno"), 
+    #                          "MU Brno", nazev_zkraceny),
+    # nazev_zkraceny = if_else(str_detect(nazev_zkraceny, "NPÚ"), 
+    #                          "NPÚ generální ředitelství", nazev_zkraceny),
+    # nazev_zkraceny = if_else(str_detect(nazev_zkraceny, "Archeologický ústav Brno"), 
+    #                          "Archeologický ústav Brno", nazev_zkraceny)
+  ) %>% 
+  filter(!is.na(ico)) %>% 
+  select(-nazev_zkraceny)
 
 proj_clean <- proj %>% 
   filter(!is.na(organizace_prihlaseni)) %>% 
@@ -61,39 +73,68 @@ proj_clean <- proj %>%
          # pian,
          x = geometry_e,
          y = geometry_n) %>% 
-  mutate(nazev_zkraceny = if_else(str_detect(nazev_zkraceny, "MU Brno"), 
-                                  "MU Brno", nazev_zkraceny),
-         nazev_zkraceny = if_else(str_detect(nazev_zkraceny, "NPÚ"), 
-                                  "NPÚ generální ředitelství", nazev_zkraceny),
-         nazev_zkraceny = if_else(str_detect(nazev_zkraceny, "Archeologický ústav Brno"), 
-                                  "Archeologický ústav Brno", nazev_zkraceny))
+  mutate(ico = unname(ico[nazev_zkraceny])) %>% 
+  filter(!is.na(ico)) %>% 
+  select(-nazev_zkraceny)
 
 pian_clean <- akce_clean %>% bind_rows(proj_clean)
 
 # check if all oao present
-pian_clean$nazev_zkraceny %in% heslar$nazev_zkraceny %>% all()
-pian_clean$nazev_zkraceny[!pian_clean$nazev_zkraceny %in% heslar$nazev_zkraceny]
+pian_clean$ico %in% ico %>% all()
+# pian_clean$ico[!pian_clean$ico %in% ico]
 
-oao_platne[!oao_platne %in% pian_clean$nazev_zkraceny]
-
-# OAO that have PIANs but are not OAO!
-pian_clean$nazev_zkraceny[!pian_clean$nazev_zkraceny %in% oao_platne] %>% 
-  factor() %>% levels()
-
-# filter only platne OAO dle GD seznamu
-pian_clean <- pian_clean %>% filter(nazev_zkraceny %in% oao_platne) 
+# oao without any information in amcr
+ico_mapping$label[!ico %in% pian_clean$ico] %>% as_tibble()
 
 # sf ----------------------------------------------------------------------
 
-pian_sf <- pian_clean %>% st_as_sf(coords = c("x", "y")) %>% 
+pian_sf <- pian_clean %>% 
+  select(-ident) %>% 
+  st_as_sf(coords = c("x", "y")) %>% 
   st_set_crs(4326)
 
-pian_nest <- pian_sf %>% 
-  group_by(nazev_zkraceny) %>% 
+
+# remove pian outside polygon --------------------
+
+poly <- st_read(here::here("data/final/oao_territory_poly.geojson"))
+
+ico_seq <- ico %>% factor() %>% levels()
+
+res <- vector("list", length(ico_seq)) %>% setNames(ico_seq)
+
+for (i in seq_along(ico_seq)) {
+  poly_i <- poly %>% 
+    filter(ico == ico_seq[i])
+  pian_i <- pian_sf %>% 
+    filter(ico == ico_seq[i])
+  
+  res[[i]] <- pian_i[as.vector(st_contains(poly_i, pian_i, sparse = FALSE)), ]
+}
+
+pian_valid <- res %>% bind_rows()
+
+# x <- pian_clean %>% group_by(ico) %>% count()
+# y <- pian_valid %>% st_drop_geometry() %>% group_by(ico) %>% count()
+# 
+# x %>% left_join(y, by = "ico") %>% 
+#   mutate(fuu = n.x == n.y) %>% 
+#   filter(!fuu) %>% View()
+
+pian_nest <- pian_valid %>% 
+  group_by(ico) %>% 
   nest()
 
 # create grid -------------------------------------------------------------
 
+#' Contained in grid
+#'
+#' @param x \code{sf} object of geometry type POINT
+#' @param grid Grid definition.
+#'
+#' @return
+#' @export
+#'
+#' @examples
 contained_in_grid <- function(x, grid) {
   contains <- st_contains(grid, x)
   n <- contains[contains %>% lengths() > 0] %>% 
@@ -117,29 +158,33 @@ grids <- pian_nest %>%
 st_write(grids, here::here("data/final", "oao_grid.geojson"))
 
 file.copy(here::here("data/final/oao_grid.geojson"),
-          here::here("app/oao_grid.geojson"), overwrite = TRUE)
+          here::here("app/data/oao_grid.geojson"), overwrite = TRUE)
 
 
 # playground --------------------------------------------------------------
 
-x <- grids %>% 
-  filter(nazev_zkraceny == "ÚAPP Brno")
-
-x %>% 
-  ggplot() +
-  geom_sf(data = RCzechia::republika(), fill = "white") +
-  geom_sf(aes(fill = scaled), alpha = 0.8, color = NA) +
-  geom_sf_text(aes(label = value)) +
-  scale_fill_gradient(low = "#E5F5E0", high = "#31A354") +
-  theme_void()
-
-# leaflet map
-pal <- leaflet::colorNumeric(palette = "YlGnBu", domain = x$scaled)
-# YlGn YlGnBu Greens Blues
-
-x %>% 
-  leaflet::leaflet() %>% 
-  leaflet::addTiles() %>% 
-  leaflet::addProviderTiles(provider = leaflet::providers$CartoDB.Positron) %>% 
-  leaflet::addPolygons(stroke = F, smoothFactor = 0.2,
-                       color = ~pal(scaled), fillOpacity = 0.6)
+# uapp <- "48511005"
+# uappsc <- "49276433"
+# npu <- "75032333"
+# 
+# x <- grids %>%
+#   filter(ico == uapp)
+# 
+# x %>%
+#   ggplot() +
+#   geom_sf(data = RCzechia::republika(), fill = "white") +
+#   geom_sf(aes(fill = scaled), alpha = 0.8, color = NA) +
+#   geom_sf_text(aes(label = value)) +
+#   scale_fill_gradient(low = "#E5F5E0", high = "#31A354") +
+#   theme_void()
+# 
+# # leaflet map
+# pal <- leaflet::colorNumeric(palette = "YlGnBu", domain = x$scaled)
+# # YlGn YlGnBu Greens Blues
+# 
+# x %>%
+#   leaflet::leaflet() %>%
+#   leaflet::addTiles() %>%
+#   leaflet::addProviderTiles(provider = leaflet::providers$CartoDB.Positron) %>%
+#   leaflet::addPolygons(stroke = F, smoothFactor = 0.2,
+#                        color = ~pal(scaled), fillOpacity = 0.6)

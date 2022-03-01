@@ -12,15 +12,30 @@ library(sf)
 library(stringr)
 
 source("R/data.R")
-source("R/leaflet_czechrep.R")
 source("R/oao_spatial_filter.R")
+source("R/leaflet_czechrep.R")
+source("R/dt_meta.R")
+
 
 # constant ----------------------------------------------------------------
 
-sleep <- 0.1
-icon_ext_link <- icon("fas fa-external-link-alt")
+sleep <- 0.4
 url_da <- "https://digiarchiv.aiscr.cz/results?entity=projekt&f_organizace="
+url_da_coords <- "https://digiarchiv.aiscr.cz/results?mapa=true&loc_rpt="
+icon_ext_link <- icon("fas fa-external-link-alt") # "fas fa-link"
+icon_map_link <<- icon("fas fa-map-marked-alt")
 
+
+# ui funs -----------------------------------------------------------------
+
+select_oao <- function(inputId, label, multiple = FALSE) {
+  selectInput(inputId, label, 
+              choices = c(Vyberte = "", 
+                          setNames(oao_names_tab$ico, 
+                                   oao_names_tab$nazev)),
+              selectize = TRUE, multiple = multiple, 
+              width = "100%")
+}
 
 # data input --------------------------------------------------------------
 
@@ -31,6 +46,13 @@ oao_grid <- oao_sf("data/oao_grid.geojson")
 oao_rep <- oao_scope %>% 
   dplyr::filter(area >= 7.8e10) %>% 
   sf::st_drop_geometry()
+
+oao_names_tab <- oao_meta %>% 
+  dplyr::select(ico, nazev) %>% 
+  dplyr::arrange(nazev)
+
+oao_names_vec <- oao_names_tab$nazev %>% 
+  setNames(oao_names_tab$ico)
 
 
 # navbar ui ---------------------------------------------------------------
@@ -137,71 +159,90 @@ mapclick_page <- div(
 # mapclick server
 mapclick_server <- function(input, output, session) {
   
+  # buffer text string
   output$buffer <- renderText({
     input$buffer
   })
   
+  # main map
   output$clickmap <- renderLeaflet({
     Sys.sleep(sleep)
     leaflet_map
   })
   
+  # coordinates of map click
+  click_sf <- reactive({
+    click2sf(input$clickmap_click)
+  })
+  
+  # add click marker to the map
   observeEvent(input$clickmap_click, {
-    # coordinates of map click
-    click_sf <- click2sf(input$clickmap_click)
-    
-    # add marker
     leaflet_czechrep_add_marker(input$clickmap_click)
-    
-    # filter oao
-    output$tab_poly <- renderTable({
-      oao_filter_poly(oao_scope, click_sf, oao_rep)
-    }, sanitize.text.function = function(x) x)
-    
-    output$tab_grid <- renderTable({
-      oao_filter_grid(oao_grid, click_sf, input$buffer)
-    }, sanitize.text.function = function(x) x)
-    
-    output$tab_rep <- renderTable({
-      oao_rep %>% 
-        dplyr::select(Organizace = nazev_zkraceny)
-    }, sanitize.text.function = function(x) x)
-    
-    # links to da
-    click_buffer_bbox <- reactive({
-      click_buffer(click_sf, input$buffer)
-    })
-    click_cell_bbox <- click_cell(click_sf)
-    
-    output$link_da_buffer <- renderUI({
-      tagList(
-        "Zobrazit vybranou oblast v ",
-        tags$a(
-          icon_ext_link, "Digitálním archivu AMČR.",
-          href = paste0("https://digiarchiv.aiscr.cz/results?mapa=true&loc_rpt=",
-                        click_buffer_bbox()[2], ",", 
-                        click_buffer_bbox()[1], ",",
-                        click_buffer_bbox()[4], ",", 
-                        click_buffer_bbox()[3],
-                        "&entity=projekt"),
-          target = "_blank"
-        ))
-    })
-    
-    output$link_da_cell <- renderUI({
-      tagList(
-        "Zobrazit okolí vybraného bodu v ",
-        tags$a(
-          icon_ext_link, "Digitálním archivu AMČR.",
-          href = paste0("https://digiarchiv.aiscr.cz/results?mapa=true&loc_rpt=",
-                        click_cell_bbox[2], ",", 
-                        click_cell_bbox[1], ",",
-                        click_cell_bbox[4], ",", 
-                        click_cell_bbox[3],
-                        "&entity=projekt"),
-          target = "_blank"
-        ))
-    })
+  })
+  
+  # filter oao
+  output$tab_poly <- renderTable({
+    req(input$clickmap_click)
+    oao_filter_poly(oao_scope, click_sf(), oao_rep, 
+                    oao_names_vec, client_url())
+  }, align = "cl", sanitize.text.function = function(x) x)
+  
+  output$tab_grid <- renderTable({
+    req(input$clickmap_click)
+    oao_filter_grid(oao_grid, click_sf(), input$buffer, 
+                    oao_names_vec, client_url())
+  }, align = "cl", sanitize.text.function = function(x) x)
+  
+  output$tab_rep <- renderTable({
+    oao_rep %>% 
+      dplyr::mutate(name = oao_names_vec[ico],
+                    link = paste0("<a href='", client_url(), 
+                                  "detail?oao=", ico, "/'>", 
+                                  icon_map_link, "</a>")) %>% 
+      dplyr::select(Detail = link, Organizace = name)
+  }, align = "cl", sanitize.text.function = function(x) x)
+  
+  # links to da
+  # buffer around the click
+  click_buffer_bbox <- reactive({
+    click_buffer(click_sf(), input$buffer)
+  })
+  
+  output$link_da_buffer <- renderUI({
+    req(input$clickmap_click)
+    tagList(
+      "Zobrazit vybranou oblast v ",
+      tags$a(
+        icon_ext_link, "Digitálním archivu AMČR.",
+        href = paste0(url_da_coords,
+                      click_buffer_bbox()[2], ",",
+                      click_buffer_bbox()[1], ",",
+                      click_buffer_bbox()[4], ",",
+                      click_buffer_bbox()[3],
+                      "&entity=projekt"),
+        target = "_blank"
+      ))
+  })
+  
+  # box/cell of the given click
+  click_cell_bbox <- reactive({
+    click_cell(click_sf())
+  })
+  
+  output$link_da_cell <- renderUI({
+    req(input$clickmap_click)
+    tagList(
+      "Zobrazit okolí vybraného bodu v ",
+      tags$a(
+        icon_ext_link, "Digitálním archivu AMČR.",
+        href = paste0(url_da_coords,
+                      click_cell_bbox()[2], ",",
+                      click_cell_bbox()[1], ",",
+                      click_cell_bbox()[4], ",",
+                      click_cell_bbox()[3],
+                      "&entity=projekt"),
+        target = "_blank"
+      ))
   })
 }
 
@@ -212,31 +253,17 @@ mapclick_server <- function(input, output, session) {
 details_page <- div(
   fluidRow(
     column(
-      4, fluidRow(
+      4, select_oao("oao", label = "Organizace:", multiple = FALSE),
+      fluidRow(
         column(
-          7, selectInput("oao", "Organizace:", 
-                         choices = c(Vyberte = "", oao_meta$nazev_zkraceny), 
-                         selectize = TRUE, multiple = FALSE),
+          6, checkboxInput("poly", "Zobrazit územní působnost", value = TRUE)
         ),
         column(
-          5, checkboxInput("poly", "Zobrazit územní působnost", value = TRUE),
-          checkboxInput("grid", "Zobrazit akce", value = TRUE)
-        ),
+          6, checkboxInput("grid", "Zobrazit akce", value = TRUE)
+        )
       ),
       tags$hr(),
       uiOutput("detail")
-      # parse as a single html
-      # tags$h3(htmlOutput("link_local", inline = TRUE),
-      #         textOutput("name", inline = TRUE)),
-      # tags$p(textOutput("ico", inline = TRUE)),
-      # tags$p(htmlOutput("web")),
-      # tags$p(htmlOutput("link_da")),
-      # tags$h4(textOutput("h4_adresa")),
-      # tags$p(htmlOutput("address")),
-      # tags$h4(textOutput("h4_opravneni")),
-      # tags$p(textOutput("auth_text")),
-      # tags$h4(textOutput("h4_uzemi")),
-      # tags$p(textOutput("scope_text"))
     ),
     column(
       8, leafletOutput("map")
@@ -251,32 +278,36 @@ details_server <- function(input, output, session) {
   oao_scope_flt <- reactive({
     oao_filter(oao_scope, input$oao)
   })
+  
   oao_grid_flt <- reactive({
     oao_filter(oao_grid, input$oao)
   })
+  
   oao_meta_flt <- reactive({
     oao_filter(oao_meta, input$oao)
   })
   
   # text details
   output$detail <- renderText({
-    if (input$oao == "MU Brno") {
-      includeHTML("text/mu_brno.html")
-    } else if (input$oao == "Národní památkový ústav") {
-      includeHTML("text/npu.html")
+    req(input$oao)
+    if (!is.na(oao_meta_flt()$spec_text)) {
+      includeHTML(paste0("text/", oao_meta_flt()$spec_text, ".html"))
     } else {
       oao_meta_flt() %>% dplyr::transmute(
         text = HTML(paste0(
-          "<h3>", nazev_full, "</h3>",
-          "<h4>(", nazev_zkraceny, ")</h4>",
+          "<h3>", nazev, "</h3>",
+          # "<h4>(", nazev_zkraceny, ")</h4>",
           "<p>Webové stránky: ", web, "</p>",
           "<p>IČO: ", ico, "</p>",
           "<h4>Adresa</h4>",
-          "<p>", address, "</p>",
+          "<p>", adresa, "</p>",
           "<h4>Detaily oprávnění</h4>",
           "<p>", opravneni, "</p>",
+          if (!is.na(note)) {
+            paste0("<p>", note, "</p>")
+          },
           "<h4>Územní působnost</h4>",
-          "<p>", uzemi, ".</p>",
+          "<p>", uzemi, "</p>",
           "<p>Zobrazit projekty vybrané organizace v ",
           "<a href='", url_da, 
           stringr::str_replace_all(nazev_zkraceny, "\\s", "%20"), 
@@ -296,48 +327,34 @@ details_server <- function(input, output, session) {
   # clear map when oao is switched
   observeEvent(input$oao, {
     leafletProxy("map") %>%
-      clearShapes()
-  })
-  
-  observeEvent(input$oao, {
-    leafletProxy("map") %>%
+      clearShapes() %>%
       leaflet::setView(zoom = 8, lng = 15.4730, lat = 49.8175)
   })
   
-  # remove grid and polygon
+  # show/hide poly
   observe({
     if (!input$poly) {
       leafletProxy("map") %>%
         removeShape("poly")
+    } else {
+      leafletProxy("map", data = oao_scope_flt()) %>%
+        addPolygons(layerId = "poly", fill = NA, color = "#3E3F3A", weight = 6)
     }
+  })
+  
+  # show/hide grid
+  observe({
     if (!input$grid) {
       leafletProxy("map") %>%
         removeShape(oao_grid_flt()$ctverec) %>%
         removeControl("legend")
-    }
-    if (!input$poly & !input$grid) {
-      leafletProxy("map") %>%
-        clearShapes()
-    }
-  })
-  
-  # add grid and polygon
-  observe({
-    req(input$oao)
-    # add grid
-    if (input$grid) {
+    } else {
       pal <- colorNumeric(palette = "YlGnBu", domain = oao_grid_flt()$scaled)
-      leafletProxy("map", data = oao_grid_flt()) %>% 
-        addPolygons(layerId = oao_grid_flt()$ctverec, color = ~pal(scaled), 
-                    stroke =  FALSE, fillOpacity = 0.6) %>% 
-        addControl("<img src='legend.png' width=110 height=40>", 
+      leafletProxy("map", data = oao_grid_flt()) %>%
+        addPolygons(layerId = oao_grid_flt()$ctverec, color = ~pal(scaled),
+                    stroke =  FALSE, fillOpacity = 0.6) %>%
+        addControl("<img src='legend.png' width=110 height=40>",
                    position = "bottomleft", layerId = "legend")
-    }
-    
-    # add polygon
-    if (input$poly) {
-      leafletProxy("map", data = oao_scope_flt()) %>%
-        addPolygons(layerId = "poly", fill = NA, color = "#3E3F3A", weight = 6)
     }
   })
 }
@@ -346,35 +363,29 @@ details_server <- function(input, output, session) {
 # list page ---------------------------------------------------------------
 
 list_page <- div(
+  select_oao("oao_multiple", label = "Filtrovat organizace:", 
+             multiple = TRUE),
   DT::dataTableOutput("table")
 )
 
 # list server
 list_server <- function(input, output, session) {
   
+  oao_meta_multi_flt <- reactive({
+    oao_filter(oao_meta, input$oao_multiple)
+  })
+  
   # DT table
   output$table <- DT::renderDataTable({
-    oao_meta %>% 
-      sf::st_drop_geometry() %>%
-      dplyr::mutate(
-        nazev = paste0("<b>", nazev_full, "</b><br>(", nazev_zkraceny, ")")) %>% 
-      dplyr::select(nazev, ico, web, address) %>% 
-      DT::datatable(
-        escape = FALSE,
-        extensions = 'Scroller', 
-        rownames = FALSE,
-        colnames = c(
-          "Organizace" = "nazev",
-          "IČO" = "ico", 
-          "Webové stránky" = "web",
-          "Adresa" = "address"),
-        options = list(
-          deferRender = TRUE,
-          scrollY = "calc(100vh - 240px)", 
-          scroller = TRUE,
-          columnDefs = list(list(className = 'dt-left', targets = "_all"))
-        )
-      )
+    if (!is.null(input$oao_multiple)) {
+      oao_meta_multi_flt() %>% 
+        dt_data_prep(url = client_url()) %>% 
+        dt_create()
+    } else {
+      oao_meta %>% 
+        dt_data_prep(url = client_url()) %>% 
+        dt_create()
+    }
   })
   
 }
@@ -417,6 +428,22 @@ ui <- fluidPage(
 # server ------------------------------------------------------------------
 
 server <- function(input, output, session) {
+  
+  # get current url
+  client_url <<- reactive({
+    client <- reactiveValuesToList(session$clientData)
+    paste0(client$url_protocol, "//",
+           client$url_hostname, ":",
+           client$url_port, client$url_pathname, "#!/")
+  })
+  
+  # observe({
+  #   print(
+  #     # reactiveValuesToList(session$clientData)
+  #     client_url()
+  #     )
+  # })
+  
   router$server(input, output, session)
   
   # greeter ---------------------------------------------------------------
@@ -431,10 +458,18 @@ server <- function(input, output, session) {
   
   showModal(greeter)
   
+  # parsing url parameter ?oao=ico
+  observe({
+    oao_url <- get_query_param(field = "oao")
+    
+    if (!is.null(oao_url)) {
+      updateSelectInput(inputId = "oao", selected = oao_url)
+    }
+  })
 }
 
 
 # app ---------------------------------------------------------------------
 
-shinyApp(ui, server)
+shinyApp(ui, server, enableBookmarking = "url")
 
