@@ -296,7 +296,6 @@ details_server <- function(input, output, session) {
       oao_meta_flt() %>% dplyr::transmute(
         text = HTML(paste0(
           "<h3>", nazev, "</h3>",
-          # "<h4>(", nazev_zkraceny, ")</h4>",
           "<p>Webové stránky: ", web, "</p>",
           "<p>IČO: ", ico, "</p>",
           "<h4>Adresa</h4>",

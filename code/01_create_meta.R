@@ -1,7 +1,7 @@
 # This script reads updated data from GD and creates metadata table
 
 library(tidyverse)
-library(googledrive)
+# library(googledrive)
 library(googlesheets4)
 
 
@@ -16,7 +16,6 @@ dir_fin <- paste0(dir_data, "/final")
 # data from GD ------------------------------------------------------------
 
 revised_gd_url <- "https://docs.google.com/spreadsheets/d/1knxDiUuCVqwgzgQkodhGg0vMe6w6LsKiGVqrsvi5dpw/edit#gid=0"
-gd_revised <- drive_get(revised_gd_url)
 
 # updated_gd_url <- "https://docs.google.com/spreadsheets/d/1RXXRGpgkrgtBhF9taEtCVuHxVIJcbeATF9RBxBtORJY/edit?usp=sharing"
 # gd_updated <- drive_get(updated_gd_url)
@@ -27,7 +26,7 @@ gd_revised <- drive_get(revised_gd_url)
 
 # revised ----------------------------------------
 
-oao_gd <- read_sheet(gd_revised, sheet = "oao_webapp") %>% 
+oao_gd <- read_sheet(revised_gd_url, sheet = "oao_webapp") %>% 
   # remove space from PSČ to geocode addresses properly
   mutate(adresa = str_remove(adresa, "(?<=\\d{3})\\s(?=\\d{2})")) %>% 
   filter(app)
