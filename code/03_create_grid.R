@@ -2,8 +2,6 @@
 
 library(tidyverse)
 library(sf)
-# library(googledrive)
-# library(googlesheets4)
 
 
 # data  -------------------------------------------------------------------
@@ -20,10 +18,9 @@ proj <- read_csv(here::here("data/processed", "pian_proj.csv"))
 
 # GD data
 revised_gd_url <- "https://docs.google.com/spreadsheets/d/1knxDiUuCVqwgzgQkodhGg0vMe6w6LsKiGVqrsvi5dpw/edit#gid=0"
-gd_revised <- googledrive::drive_get(revised_gd_url)
 
 # oao s platnou dohodou
-oao_platne <- googlesheets4::read_sheet(gd_revised, sheet = "oao_webapp") %>%
+oao_platne <- googlesheets4::read_sheet(revised_gd_url, sheet = "oao_webapp") %>%
   filter(app) %>%
   pull(ico)
 
@@ -31,7 +28,7 @@ oao_platne <- googlesheets4::read_sheet(gd_revised, sheet = "oao_webapp") %>%
 # gd_updated <- drive_get(updated_gd_url)
 
 # mapping ico to heslar amcr
-ico_mapping <- googlesheets4::read_sheet(gd_revised, sheet = "oao_heslar_amcr") %>% 
+ico_mapping <- googlesheets4::read_sheet(revised_gd_url, sheet = "oao_heslar_amcr") %>% 
   filter(ico %in% oao_platne)
 ico <- setNames(ico_mapping$ico, ico_mapping$amcr_nazev_zkraceny)
 

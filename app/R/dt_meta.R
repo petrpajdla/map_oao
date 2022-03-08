@@ -55,6 +55,8 @@ dt_data_prep <- function(data, url) {
       dplyr::across(
         dplyr::ends_with(c("from", "to")), 
         \(x) as.Date(x, format = "%d. %m. %Y")),
+      mk_to = dplyr::if_else(is.na(mk_to) & mk_neomezena, "neomezena", as.character(mk_to)),
+      av_to = dplyr::if_else(is.na(av_to) & av_neomezena, "neomezena", as.character(av_to)),
       link_map = paste0("<a href='", url, "detail?oao=", 
                         ico, "/'>", icon_map_link, "</a>")
     ) %>% 

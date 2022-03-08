@@ -1,8 +1,6 @@
 # This script reads updated data from GD and creates polygons for oao
 
 library(tidyverse)
-library(googledrive)
-library(googlesheets4)
 
 
 # funs --------------------------------------------------------------------
@@ -26,7 +24,6 @@ add_polygon <- function(x) {
 # data --------------------------------------------------------------------
 
 revised_gd_url <- "https://docs.google.com/spreadsheets/d/1knxDiUuCVqwgzgQkodhGg0vMe6w6LsKiGVqrsvi5dpw/edit#gid=0"
-gd_revised <- drive_get(revised_gd_url)
 
 # updated_gd_url <- "https://docs.google.com/spreadsheets/d/1RXXRGpgkrgtBhF9taEtCVuHxVIJcbeATF9RBxBtORJY/edit?usp=sharing"
 # gd_updated <- drive_get(updated_gd_url)
@@ -51,7 +48,7 @@ katastry <- sf::read_sf(here::here("data/raw", "katastry_shp"))
 
 # uzemni pusobnost --------------------------------------------------------
 
-oao_uzemi <- read_sheet(gd_revised, sheet = "oao_webapp") %>% 
+oao_uzemi <- googlesheets4::read_sheet(revised_gd_url, sheet = "oao_webapp") %>% 
   select(ico, app, nazev_zkraceny, starts_with("is"), kraj, okres, katastr) %>% 
   filter(app) %>% 
   select(-app)
