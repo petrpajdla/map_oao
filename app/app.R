@@ -64,7 +64,7 @@ menubar <- tags$nav(
     tags$div(
       class = "navbar-header",
       tags$a(
-        class = "navbar-brand", href = "#",
+        class = "navbar-brand", href = "#!/",
         icon("fas fa-map-marked-alt"), "Mapa archeologických organizací")),
     tags$ul(
       class = "nav navbar-nav",
@@ -78,13 +78,13 @@ menubar <- tags$nav(
         a(href = route_link("list"),
           icon("fas fa-bars"), "seznam organizací")),
       tags$li(
+        a(href = "https://amcr-info.aiscr.cz/oznameni",
+          target = "_blank",
+          icon_ext_link, "Oznámit stavební záměr")),
+      tags$li(
         a(href = route_link("about"),
           icon("fas fa-info-circle"),
           "o aplikaci")),
-      tags$li(
-        a(href = "https://amcr-info.aiscr.cz/oznameni",
-          target = "_blank",
-          icon_ext_link, "Oznámit stavební záměr"))
     ),
     tags$div(
       class = "navbar-right navbar-logo",
@@ -366,7 +366,9 @@ details_server <- function(input, output, session) {
 list_page <- div(
   select_oao("oao_multiple", label = "Filtrovat organizace:", 
              multiple = TRUE),
-  DT::dataTableOutput("table")
+  DT::dataTableOutput("table"),
+  tags$p(style = "margin-top:6px;",
+    "Celkem evidujeme ", textOutput("n_oao", inline = TRUE), " organizací.")
 )
 
 # list server
@@ -389,6 +391,9 @@ list_server <- function(input, output, session) {
     }
   })
   
+  output$n_oao <- renderText({
+    nrow(oao_meta)
+  })
 }
 
 
