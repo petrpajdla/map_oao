@@ -21,7 +21,7 @@ veřejných rejstříků a webových stránek daných organizací.<br>
 Data o provedených výzkumech a jejich poloze jsou čerpána z 
 <a href="https://amcr-info.aiscr.cz/" target="_blank">Archeologické mapy ČR</a> (AMČR).
 
-Poslední aktualizace dat proběhla <b>2. 5. 2022</b>.
+Poslední aktualizace dat proběhla <b>20. 7. 2022</b>.
 
 #### Další informace
 <a href="https://www.mkcr.cz/seznam-organizaci-opravnenych-k-provadeni-archeologickych-vyzkumu-278.html" target="_blank">Seznam oprávnění</a> udělených Ministerstvem kultury ČR.
