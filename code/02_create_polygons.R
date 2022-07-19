@@ -104,8 +104,6 @@ oao_katastry <- oao_uzemi %>%
   sf::st_transform(4326)
 
 # result
-# 2. 5. 2022 - implementation to be able to use any combination of okre/ku etc...
-# seems shitty, need to improve procedures to fill holes after union etc.
 oao_uzemi_poly <- oao_republika %>% 
   bind_rows(oao_kraje) %>% 
   bind_rows(oao_okresy) %>% 
@@ -134,6 +132,10 @@ oao_uzemi_poly <- oao_uzemi_poly %>%
 
 # export resulting polygons -----------------------------------------------
 
+if (file.exists(here::here("data/final", "oao_territory_poly.geojson"))) {
+  file.remove(here::here("data/final", "oao_territory_poly.geojson"))
+}
+
 sf::st_write(oao_uzemi_poly, 
              here::here("data/final", "oao_territory_poly.geojson"))
 
@@ -143,6 +145,10 @@ sf::st_write(oao_uzemi_poly,
 oao_uzemi_poly_simple <- sf::st_simplify(oao_uzemi_poly, 
                                          dTolerance = 150, 
                                          preserveTopology = TRUE)
+
+if (file.exists(here::here("data/final", "oao_territory_poly_simple.geojson"))) {
+  file.remove(here::here("data/final", "oao_territory_poly_simple.geojson"))
+}
 
 sf::st_write(oao_uzemi_poly_simple, 
              here::here("data/final", "oao_territory_poly_simple.geojson"))
@@ -163,19 +169,19 @@ file.copy(here::here("data/final/oao_territory_poly_simple.geojson"),
 #   ggplot() +
 #     geom_sf() +
 #     facet_wrap(~ico)
-
-# oao_uzemi_poly_simple %>% 
-#   filter(nazev_zkraceny == "MU Brno") %>% 
-#   leaflet::leaflet() %>% 
-#   leaflet::addTiles() %>% 
+#
+# oao_uzemi_poly_simple %>%
+#   filter(ico == "00065048") %>%
+#   leaflet::leaflet() %>%
+#   leaflet::addTiles() %>%
 #   leaflet::addPolygons()
-# 
-# oao_uzemi_poly %>% 
-#   filter(nazev_zkraceny == "Muzeum Vrchlabí") %>% 
-#   leaflet::leaflet() %>% 
-#   leaflet::addTiles() %>% 
+#
+# oao_uzemi_poly %>%
+#   filter(nazev_zkraceny == "Muzeum Vrchlabí") %>%
+#   leaflet::leaflet() %>%
+#   leaflet::addTiles() %>%
 #   leaflet::addPolygons()
-
+#
 # # Searches through katastr names and plots their position.
 # katastry[str_detect(katastry$NAZ_KU, "Střítež"), ] %>%
 #   ggplot() +
@@ -183,9 +189,9 @@ file.copy(here::here("data/final/oao_territory_poly_simple.geojson"),
 #   geom_sf() +
 #   geom_sf_text(aes(label = NAZ_KU)) +
 #   theme_void()
-# 
-# oao_republika %>% 
-#   sf::st_as_sf() %>% 
+#
+# oao_republika %>%
+#   sf::st_as_sf() %>%
 #   ggplot() +
 #   geom_sf() +
 #   facet_wrap(~nazev_zkraceny)
