@@ -1,5 +1,6 @@
 # app
-# deployApp(appDir = here::here("app/"), appName = "app_oao")
+
+# note: remote shiny server restarts the app only when file app.R has changes
 
 # packages ----------------------------------------------------------------
 
@@ -400,7 +401,14 @@ list_server <- function(input, output, session) {
 # about page --------------------------------------------------------------
 
 about_page <- div(
-  includeMarkdown("text/about.md")
+  fluidRow(
+    column(
+      6, includeMarkdown("text/about_left.md")
+    ),
+    column(
+      6, includeMarkdown("text/about_right.md")
+    )
+  )
 )
 
 
