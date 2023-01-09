@@ -29,7 +29,8 @@ revised_gd_url <- "https://docs.google.com/spreadsheets/d/1knxDiUuCVqwgzgQkodhGg
 oao_gd <- read_sheet(revised_gd_url, sheet = "oao_webapp") %>% 
   # remove space from PSČ to geocode addresses properly
   mutate(adresa = str_remove(adresa, "(?<=\\d{3})\\s(?=\\d{2})")) %>% 
-  filter(app)
+  filter(app) %>% 
+  select(-ends_with("minus6"))
 
 # updated -----------------------------------------------------------------
 
