@@ -10,11 +10,11 @@ je provozována
 (ARÚB).<br>
 V případě potřeby nás prosím kontaktujte na emailu <a href=mailto:info@amapa.cz>info@amapa.cz</a>.
 
-### Správa dat, uživatelů a podpora
+### Správa dat a uživatelů
 
-* Pro oblast Čech:  
+* Podpora pro oblast Čech:  
   **Archeologický ústav AV ČR, Praha, v. v. i.** <a href=mailto:amcr@arup.cas.cz>amcr@arup.cas.cz</a>;
-* Pro oblast Moravy a Slezska:  
+* Podpora pro oblast Moravy a Slezska:  
   **Archeologický ústav AV ČR, Brno, v. v. i.** <a href=mailto:amcr@arub.cz>amcr@arub.cz</a> (vč. kraje Vysočina).
 
 ### Zdroje dat
